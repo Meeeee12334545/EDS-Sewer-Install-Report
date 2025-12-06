@@ -2053,16 +2053,15 @@ with st.form("site_form", clear_on_submit=False):
         }
         site_record.update(derived)
 
-        # Enforce uniqueness: project + site name
+        # Enforce uniqueness: site name (manhole) only
         for i, s in enumerate(sites):
             if (
                 i != (edit_index if edit_index is not None else -1)
-                and s.get("project_name") == project_name
                 and s.get("site_name") == site_name
             ):
                 st.error(
-                    "A site with this **project name** and **site / manhole name** "
-                    "already exists. Please adjust the name or load that site for editing."
+                    "A site with this **site / manhole name** already exists. "
+                    "Please adjust the name or load that site for editing."
                 )
                 st.stop()
 
