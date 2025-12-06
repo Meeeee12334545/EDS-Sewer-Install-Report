@@ -878,126 +878,159 @@ EDS_BORDER = "#d9e2ef"
 st.markdown(
     f"""
 <style>
-html, body, [data-testid="stAppViewContainer"], .stApp {{
-    background-color: {EDS_LIGHT_BG} !important;
-    color: #111827 !important;
-    font-family: "Helvetica Neue", Arial, sans-serif;
+:root {{
+  --eds-primary: {EDS_PRIMARY};
+  --eds-secondary: {EDS_SECONDARY};
+  --eds-light-bg: {EDS_LIGHT_BG};
+  --eds-card-bg: {EDS_CARD_BG};
+  --eds-border: {EDS_BORDER};
+  --eds-text: #111827;
+  --eds-btn-padding: 0.5rem 1.2rem;
 }}
 
+/* Apply Helvetica Neue everywhere possible and enforce readable text colour */
+html, body, [data-testid="stAppViewContainer"], .stApp {{
+    background-color: var(--eds-light-bg) !important;
+    color: var(--eds-text) !important;
+    font-family: "Helvetica Neue", "Helvetica", Arial, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}}
+
+/* Container spacing */
 .block-container {{
     padding-top: 2rem;
     padding-bottom: 2rem;
+    font-family: inherit !important;
+    color: inherit !important;
 }}
 
+/* Form card */
 div[data-testid="stForm"] {{
-    background-color: {EDS_CARD_BG};
+    background-color: var(--eds-card-bg) !important;
     padding: 1.5rem 1.75rem;
     border-radius: 8px;
-    border: 1px solid {EDS_BORDER};
+    border: 1px solid var(--eds-border);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
 
+/* Headings */
 h1, h2, h3 {{
-    color: {EDS_PRIMARY};
+    color: var(--eds-primary) !important;
+    font-family: "Helvetica Neue", "Helvetica", Arial, sans-serif !important;
 }}
 
+/* Labels and widget labels */
 label, [data-testid="stWidgetLabel"] p {{
-    color: #111827 !important;
+    color: var(--eds-text) !important;
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    font-family: inherit !important;
 }}
 
-input, textarea, select {{
+/* Inputs, textareas and selects: ensure white background and dark text */
+input, textarea, select, .stText, .stMarkdown, .stCheckbox {{
     background-color: #ffffff !important;
-    color: #111827 !important;
+    color: var(--eds-text) !important;
     border-radius: 4px !important;
+    font-family: inherit !important;
 }}
 
+/* Baseweb input/textarea/select */
 [data-baseweb="input"], [data-baseweb="input"] * {{
     background-color: #ffffff !important;
-    color: #111827 !important;
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
-
 [data-baseweb="textarea"], [data-baseweb="textarea"] * {{
     background-color: #ffffff !important;
-    color: #111827 !important;
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
-
 [data-baseweb="select"], [data-baseweb="select"] * {{
     background-color: #ffffff !important;
-    color: #111827 !important;
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
 
+/* Streamlit selectbox container */
 [data-testid="stSelectbox"] div[role="combobox"] {{
     background-color: #ffffff !important;
-    color: #111827 !important;
+    color: var(--eds-text) !important;
     border-radius: 4px !important;
     border: 1px solid #d1d5db !important;
+    font-family: inherit !important;
 }}
 
+/* Expander */
 [data-testid="stExpander"] > div {{
     border-radius: 4px !important;
     border: 1px solid #e5e7eb !important;
     background-color: #ffffff !important;
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
-
 [data-testid="stExpander"] summary,
 [data-testid="stExpander"] p,
 [data-testid="stExpander"] svg {{
-    color: #111827 !important;
-    fill: #111827 !important;
+    color: var(--eds-text) !important;
+    fill: var(--eds-text) !important;
     font-weight: 600 !important;
 }}
 
-.stButton>button {{
-    background-color: {EDS_PRIMARY} !important;
+/* Buttons: normal and download. Force EDS colours and readable foregrounds */
+button,
+.stButton>button,
+[data-testid="stDownloadButton"]>button,
+.stDownloadButton>button,
+input[type="submit"],
+input[type="button"] {{
+    font-family: inherit !important;
+    background-color: var(--eds-primary) !important;
     color: #ffffff !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     border: none !important;
-    padding: 0.5rem 1.2rem !important;
+    padding: var(--eds-btn-padding) !important;
     font-weight: 600 !important;
+    box-shadow: none !important;
+    cursor: pointer;
 }}
 
-.stButton>button:hover {{
-    background-color: {EDS_SECONDARY} !important;
+/* Download buttons use secondary by default */
+[data-testid="stDownloadButton"]>button,
+.stDownloadButton>button {{
+    background-color: var(--eds-secondary) !important;
+}}
+
+/* Hover states: slightly lighter secondary */
+button:hover,
+.stButton>button:hover,
+[data-testid="stDownloadButton"]>button:hover,
+.stDownloadButton>button:hover {{
+    background-color: var(--eds-secondary) !important;
     color: #ffffff !important;
 }}
 
-.stButton>button * {{
+/* Ensure any icon/text inside buttons is white */
+.stButton>button * , .stDownloadButton>button * {{
     color: #ffffff !important;
     fill: #ffffff !important;
 }}
 
-[data-testid="stDownloadButton"]>button {{
-    background-color: {EDS_SECONDARY} !important;
-    color: #ffffff !important;
-    border-radius: 4px !important;
-    border: none !important;
-    padding: 0.5rem 1.2rem !important;
-    font-weight: 600 !important;
-}}
-
-[data-testid="stDownloadButton"]>button:hover {{
-    background-color: {EDS_PRIMARY} !important;
-}}
-
-[data-testid="stDownloadButton"]>button * {{
-    color: #ffffff !important;
-    fill: #ffffff !important;
-}}
-
+/* Alerts – keep background white and readable text */
 [data-testid="stAlert"] {{
     border-radius: 4px !important;
     background-color: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    color: #111827 !important;
+    border: 1px solid var(--eds-border) !important;
+    color: var(--eds-text) !important;
 }}
-
 [data-testid="stAlert"] p {{
-    color: #111827 !important;
+    color: var(--eds-text) !important;
 }}
 
-/* Strong focus highlight for tabbing between fields */
+/* Strong focus highlight for keyboard navigation */
 input:focus,
 textarea:focus,
 select:focus,
@@ -1006,33 +1039,55 @@ button:focus,
 [data-baseweb="textarea"] textarea:focus,
 [data-baseweb="select"] [role="combobox"]:focus {{
     outline: none !important;
-    border-color: #2563eb !important;  /* Strong blue border */
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
     background-color: #ffffff !important;
+    color: var(--eds-text) !important;
 }}
 
-/* Streamlit selectbox container when focused */
+/* Streamlit selectbox focus */
 [data-testid="stSelectbox"] div[role="combobox"]:focus-within {{
     outline: none !important;
     border-color: #2563eb !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
     background-color: #ffffff !important;
+    color: var(--eds-text) !important;
 }}
 
-/* Date & time & number inputs focus */
+/* Date/time/number inputs focus */
 input[type="date"]:focus,
 input[type="time"]:focus,
 input[type="number"]:focus {{
     outline: none !important;
     border-color: #2563eb !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
 }}
 
 /* File uploader focus */
 [data-testid="stFileUploader"] section:focus-within {{
     outline: none !important;
     border: 1px solid #2563eb !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
+    background-color: #ffffff !important;
+    color: var(--eds-text) !important;
+}}
+
+/* Defensive fixes: override suspicious inline dark backgrounds */
+button[style*="background"] {{
+    background-color: var(--eds-primary) !important;
+    color: #ffffff !important;
+}}
+[style*="background-color: black"],
+[style*="background-color:#000"],
+[style*="background-color: rgb(0, 0, 0)"] {{
+    background-color: var(--eds-card-bg) !important;
+    color: var(--eds-text) !important;
+}}
+
+/* Ensure text nodes inside common containers are readable */
+.stApp, .main, .block-container, .css-1bd6qhb, .css-1v3fvcr {{
+    color: var(--eds-text) !important;
+    font-family: inherit !important;
 }}
 </style>
 """,
@@ -1728,348 +1783,4 @@ with st.form("site_form", clear_on_submit=False):
         chk_logging_started = st.checkbox(
             "Logging started",
             value=draft.get("chk_logging_started", True),
-        )
-    with ch5:
-        chk_comms_checked_platform = st.checkbox(
-            "Comms/data checked",
-            value=draft.get("chk_comms_checked_platform", True),
-        )
-
-    st.markdown("---")
-
-    st.subheader("Diagram & Photos")
-
-    # Manhole / site diagram
-    diag_col1, diag_col2 = st.columns([2, 2])
-    with diag_col1:
-        diagram_file = st.file_uploader(
-            "Upload manhole / site diagram (PNG/JPG)",
-            type=["png", "jpg", "jpeg"],
-        )
-    existing_diagram = draft.get("diagram")
-    default_diag_name = (
-        existing_diagram.get("name", "Manhole / site diagram")
-        if existing_diagram
-        else "Manhole / site diagram"
-    )
-    with diag_col2:
-        diagram_name = st.text_input(
-            "Diagram name / caption",
-            value=default_diag_name,
-        )
-
-    # Site photos
-    photo_files = st.file_uploader(
-        "Upload site photos (manhole, sensor, upstream, downstream, access, etc.)",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-        key="photo_files",
-    )
-
-    st.caption(
-        "You can name each photo below. All uploaded photos will be included in the PDF."
-    )
-
-    new_photos = []
-    for i, f in enumerate(photo_files or []):
-        cap = st.text_input(
-            f"Photo {i+1} name / description",
-            value=f.name,
-            key=f"photo_caption_{f.name}_{i}",
-        )
-        new_photos.append(
-            {
-                "name": cap,
-                "data": f.getvalue(),
-                "mime": f.type,
-            }
-        )
-
-    existing_photos = draft.get("photos", []) or []
-    if existing_photos and not photo_files:
-        st.info(
-            f"{len(existing_photos)} existing photo(s) already stored for this site. "
-            "They will be included in the PDF."
-        )
-    elif existing_photos and photo_files:
-        st.info(
-            f"{len(existing_photos)} existing photo(s) plus "
-            f"{len(new_photos)} new photo(s) will be stored."
-        )
-
-    st.markdown("---")
-
-    st.subheader("Reporting details (Prepared / Reviewed)")
-
-    rep1, rep2, rep3 = st.columns(3)
-    with rep1:
-        prepared_by = st.text_input(
-            "Prepared by",
-            value=draft.get("prepared_by", ""),
-        )
-        prepared_position = st.text_input(
-            "Prepared – position",
-            value=draft.get("prepared_position", ""),
-        )
-
-        prepared_date_default = draft.get("prepared_date")
-        if isinstance(prepared_date_default, str):
-            try:
-                prepared_date_default = date.fromisoformat(prepared_date_default)
-            except ValueError:
-                prepared_date_default = date.today()
-        elif isinstance(prepared_date_default, date):
-            pass
-        else:
-            prepared_date_default = date.today()
-
-        prepared_date = st.date_input(
-            "Prepared – date",
-            value=prepared_date_default,
-        )
-    with rep2:
-        reviewed_by = st.text_input(
-            "Reviewed by",
-            value=draft.get("reviewed_by", ""),
-        )
-        reviewed_position = st.text_input(
-            "Reviewed – position",
-            value=draft.get("reviewed_position", ""),
-        )
-
-        reviewed_date_default = draft.get("reviewed_date")
-        if isinstance(reviewed_date_default, str):
-            try:
-                reviewed_date_default = date.fromisoformat(reviewed_date_default)
-            except ValueError:
-                reviewed_date_default = date.today()
-        elif isinstance(reviewed_date_default, date):
-            pass
-        else:
-            reviewed_date_default = date.today()
-
-        reviewed_date = st.date_input(
-            "Reviewed – date",
-            value=reviewed_date_default,
-        )
-    with rep3:
-        st.write("")
-        st.write("")
-        st.write("Use these fields for internal QA / sign-off.")
-
-    st.markdown("---")
-
-    # Submit button text changes for edit vs new
-    submit_col1, submit_col2 = st.columns([1, 3])
-    with submit_col1:
-        submit_label = (
-            "Update site in current project"
-            if edit_index is not None
-            else "Add site to current project"
-        )
-        submitted = st.form_submit_button(
-            submit_label,
-            use_container_width=True,
-        )
-    with submit_col2:
-        st.caption(
-            "Once submitted, the site will appear below and can be exported "
-            "to Excel or a single-site PDF report."
-        )
-
-    # ---------- Handle form submit ----------
-    if submitted:
-        derived = calculate_average_depth_velocity_and_flow(
-            pipe_diameter_mm,
-            depth_check_meas_mm,
-            depth_check_meter_mm,
-            vel_check_meas_ms,
-            vel_check_meter_ms,
-            updated_extra,
-        )
-
-        if diagram_file is not None:
-            diagram_obj = {
-                "name": diagram_name or diagram_file.name,
-                "data": diagram_file.getvalue(),
-                "mime": diagram_file.type,
-            }
-        else:
-            diagram_obj = existing_diagram
-
-        all_photos = existing_photos + new_photos
-
-        site_record = {
-            "project_name": project_name,
-            "client": client,
-            "catchment": catchment,
-            "site_name": site_name,
-            "site_id": site_id,
-            "client_asset_id": client_asset_id,
-            "gis_id": gis_id,
-            "install_date": str(install_date),
-            "install_time": install_time.strftime("%H:%M"),
-            "gps_lat": gps_lat,
-            "gps_lon": gps_lon,
-            "manhole_location_desc": manhole_location_desc,
-            "access_type": access_type,
-            "confined_space_required": confined_space_required,
-            "traffic_control_required": traffic_control_required,
-            "access_safety_constraints": access_safety_constraints,
-            "other_permits_required": other_permits_required,
-            "pipe_diameter_mm": pipe_diameter_mm,
-            "pipe_material": pipe_material,
-            "pipe_shape": pipe_shape,
-            "depth_to_invert_mm": depth_to_invert_mm,
-            "depth_to_soffit_mm": depth_to_soffit_mm,
-            "hydro_turbulence_level": hydro_turbulence_level,
-            "upstream_config": upstream_config,
-            "downstream_config": downstream_config,
-            "hydro_drops": hydro_drops,
-            "hydro_bends": hydro_bends,
-            "hydro_junctions": hydro_junctions,
-            "hydro_surcharge_risk": hydro_surcharge_risk,
-            "hydro_backwater_risk": hydro_backwater_risk,
-            "hydraulic_notes": hydraulic_notes,
-            "meter_model": meter_model,
-            "logger_serial": logger_serial,
-            "sensor_serial": sensor_serial,
-            "sensor_distance_from_manhole_m": sensor_distance_from_manhole_m,
-            "sensor_orientation": sensor_orientation,
-            "sensor_mount_type": sensor_mount_type,
-            "datum_reference_desc": datum_reference_desc,
-            "level_range_min_mm": level_range_min_mm,
-            "level_range_max_mm": level_range_max_mm,
-            "velocity_range_min_ms": velocity_range_min_ms,
-            "velocity_range_max_ms": velocity_range_max_ms,
-            "output_scaling_desc": output_scaling_desc,
-            "logging_interval_min": logging_interval_min,
-            "timezone": timezone,
-            "comms_method": comms_method,
-            "telemetry_logger_id": telemetry_logger_id,
-            "telemetry_server": telemetry_server,
-            "telemetry_notes": telemetry_notes,
-            "depth_check_meas_mm": depth_check_meas_mm,
-            "depth_check_meter_mm": depth_check_meter_mm,
-            "depth_check_tolerance_mm": depth_check_tolerance_mm,
-            "depth_check_diff_mm": depth_check_diff_mm,
-            "depth_check_within_tol": depth_check_within_tol,
-            "vel_check_meas_ms": vel_check_meas_ms,
-            "vel_check_meter_ms": vel_check_meter_ms,
-            "vel_check_diff_ms": vel_check_meter_ms - vel_check_meas_ms,
-            "comms_verified": comms_verified,
-            "comms_verified_at": comms_verified_at,
-            "zero_depth_check_done": zero_depth_check_done,
-            "zero_depth_check_notes": zero_depth_check_notes,
-            "reference_device_type": reference_device_type,
-            "reference_device_id": reference_device_id,
-            "reference_reading_desc": reference_reading_desc,
-            "verification_readings": updated_extra,
-            "calibration_rating": calibration_rating,
-            "calibration_comment": calibration_comment,
-            "modelling_notes": modelling_notes,
-            "data_quality_risks": data_quality_risks,
-            "chk_sensor_in_main_flow": chk_sensor_in_main_flow,
-            "chk_no_immediate_drops": chk_no_immediate_drops,
-            "chk_depth_range_ok": chk_depth_range_ok,
-            "chk_logging_started": chk_logging_started,
-            "chk_comms_checked_platform": chk_comms_checked_platform,
-            "diagram": diagram_obj,
-            "photos": all_photos,
-            "prepared_by": prepared_by,
-            "prepared_position": prepared_position,
-            "prepared_date": str(prepared_date),
-            "reviewed_by": reviewed_by,
-            "reviewed_position": reviewed_position,
-            "reviewed_date": str(reviewed_date),
-        }
-        site_record.update(derived)
-
-        # Enforce uniqueness: project + site name
-        for i, s in enumerate(sites):
-            if (
-                i != (edit_index if edit_index is not None else -1)
-                and s.get("project_name") == project_name
-                and s.get("site_name") == site_name
-            ):
-                st.error(
-                    "A site with this **project name** and **site / manhole name** "
-                    "already exists. Please adjust the name or load that site for editing."
-                )
-                st.stop()
-
-        if edit_index is None:
-            st.session_state["sites"].append(site_record)
-            st.success("Site added to current project.")
-        else:
-            st.session_state["sites"][edit_index] = site_record
-            st.success("Site updated.")
-
-        st.session_state["draft_site"] = site_record
-        st.session_state["edit_index"] = None
-
-# ---------- Current sites / edit / delete ----------
-st.subheader("Current Sites in Project")
-
-if not sites:
-    st.info("No sites added yet. Use the form above to add your first site.")
-else:
-    options = [f"{i+1}. {s['project_name']} – {s['site_name']}" for i, s in enumerate(sites)]
-    idx = st.selectbox(
-        "Select a site to edit / delete",
-        options=range(len(sites)),
-        format_func=lambda i: options[i],
-        key="site_select",
-    )
-
-    col_actions1, col_actions2, col_actions3 = st.columns([1, 1, 4])
-    with col_actions1:
-        if st.button("✏️ Load selected for editing"):
-            st.session_state["draft_site"] = sites[idx]
-            st.session_state["edit_index"] = idx
-            st.session_state["gps_lat"] = sites[idx].get("gps_lat", "")
-            st.session_state["gps_lon"] = sites[idx].get("gps_lon", "")
-            st.rerun()
-    with col_actions2:
-        if st.button("🗑️ Delete selected site"):
-            st.session_state["sites"].pop(idx)
-            st.session_state["draft_site"] = None
-            st.session_state["edit_index"] = None
-            st.success("Site deleted from project.")
-            st.rerun()
-
-# ---------- Export section ----------
-st.subheader("Export")
-
-if not sites:
-    st.info("Add at least one site to enable exports.")
-else:
-    col_exp1, col_exp2 = st.columns([1, 1])
-
-    with col_exp1:
-        excel_bytes = create_excel_bytes(sites)
-        st.download_button(
-            "⬇️ Export all sites to Excel",
-            data=excel_bytes,
-            file_name="sewer_flow_installation_sites.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-
-    with col_exp2:
-        pdf_idx = st.selectbox(
-            "Select a site for PDF export",
-            options=range(len(sites)),
-            format_func=lambda i: f"{i+1}. {sites[i]['project_name']} – {sites[i]['site_name']}",
-            key="pdf_site_select",
-        )
-        pdf_bytes = create_pdf_bytes([sites[pdf_idx]])
-        proj = sites[pdf_idx].get("project_name", "project").replace(" ", "_")
-        sname = sites[pdf_idx].get("site_name", "site").replace(" ", "_")
-        st.download_button(
-            "📄 Export selected site to PDF",
-            data=pdf_bytes,
-            file_name=f"{proj}_{sname}_installation_report.pdf",
-            mime="application/pdf",
-            use_container_width=True,
         )
