@@ -2029,14 +2029,14 @@ else:
             st.session_state["edit_index"] = idx
             st.session_state["gps_lat"] = sites[idx].get("gps_lat", "")
             st.session_state["gps_lon"] = sites[idx].get("gps_lon", "")
-            st.experimental_rerun()
+            st.rerun()
     with col_actions2:
         if st.button("🗑️ Delete selected site"):
             st.session_state["sites"].pop(idx)
             st.session_state["draft_site"] = None
             st.session_state["edit_index"] = None
             st.success("Site deleted from project.")
-            st.experimental_rerun()
+            st.rerun()
 
 # ---------- Export section ----------
 st.subheader("Export")
