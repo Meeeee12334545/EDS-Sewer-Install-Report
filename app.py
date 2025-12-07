@@ -1,2315 +1,2617 @@
-import _ast
-import _sitebuiltins
-import _typeshed
-import sys
-import types
-from _collections_abc import dict_items, dict_keys, dict_values
-from _typeshed import (
-    AnnotationForm,
-    ConvertibleToFloat,
-    ConvertibleToInt,
-    FileDescriptorOrPath,
-    OpenBinaryMode,
-    OpenBinaryModeReading,
-    OpenBinaryModeUpdating,
-    OpenBinaryModeWriting,
-    OpenTextMode,
-    ReadableBuffer,
-    SupportsAdd,
-    SupportsAiter,
-    SupportsAnext,
-    SupportsDivMod,
-    SupportsFlush,
-    SupportsIter,
-    SupportsKeysAndGetItem,
-    SupportsLenAndGetItem,
-    SupportsNext,
-    SupportsRAdd,
-    SupportsRDivMod,
-    SupportsRichComparison,
-    SupportsRichComparisonT,
-    SupportsWrite,
-)
-from collections.abc import Awaitable, Callable, Iterable, Iterator, MutableSet, Reversible, Set as AbstractSet, Sized
-from io import BufferedRandom, BufferedReader, BufferedWriter, FileIO, TextIOWrapper
-from os import PathLike
-from types import CellType, CodeType, GenericAlias, TracebackType
+import io
+import json
+import math
+from datetime import time, date
 
-# mypy crashes if any of {ByteString, Sequence, MutableSequence, Mapping, MutableMapping}
-# are imported from collections.abc in builtins.pyi
-from typing import (  # noqa: Y022,UP035
-    IO,
-    Any,
-    BinaryIO,
-    ClassVar,
-    Generic,
-    Mapping,
-    MutableMapping,
-    MutableSequence,
-    Protocol,
-    Sequence,
-    SupportsAbs,
-    SupportsBytes,
-    SupportsComplex,
-    SupportsFloat,
-    SupportsIndex,
-    TypeVar,
-    final,
-    overload,
-    type_check_only,
-)
+import pandas as pd
+import streamlit as st
+import time as _time
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
-# we can't import `Literal` from typing or mypy crashes: see #11247
-from typing_extensions import (  # noqa: Y023
-    Concatenate,
-    Literal,
-    LiteralString,
-    ParamSpec,
-    Self,
-    TypeAlias,
-    TypeGuard,
-    TypeIs,
-    TypeVarTuple,
-    deprecated,
-    disjoint_base,
-)
+import folium
+from streamlit_folium import st_folium
 
-if sys.version_info >= (3, 14):
-    from _typeshed import AnnotateFunc
+# Optional: static map for PDF
+try:
+    from staticmap import StaticMap, CircleMarker
 
-_T = TypeVar("_T")
-_I = TypeVar("_I", default=int)
-_T_co = TypeVar("_T_co", covariant=True)
-_T_contra = TypeVar("_T_contra", contravariant=True)
-_R_co = TypeVar("_R_co", covariant=True)
-_KT = TypeVar("_KT")
-_VT = TypeVar("_VT")
-_S = TypeVar("_S")
-_T1 = TypeVar("_T1")
-_T2 = TypeVar("_T2")
-_T3 = TypeVar("_T3")
-_T4 = TypeVar("_T4")
-_T5 = TypeVar("_T5")
-_SupportsNextT_co = TypeVar("_SupportsNextT_co", bound=SupportsNext[Any], covariant=True)
-_SupportsAnextT_co = TypeVar("_SupportsAnextT_co", bound=SupportsAnext[Any], covariant=True)
-_AwaitableT = TypeVar("_AwaitableT", bound=Awaitable[Any])
-_AwaitableT_co = TypeVar("_AwaitableT_co", bound=Awaitable[Any], covariant=True)
-_P = ParamSpec("_P")
+    STATICMAP_AVAILABLE = True
+except ImportError:
+    STATICMAP_AVAILABLE = False
 
-# Type variables for slice
-_StartT_co = TypeVar("_StartT_co", covariant=True, default=Any)  # slice -> slice[Any, Any, Any]
-_StopT_co = TypeVar("_StopT_co", covariant=True, default=_StartT_co)  #  slice[A] -> slice[A, A, A]
-# NOTE: step could differ from start and stop, (e.g. datetime/timedelta)l
-#   the default (start|stop) is chosen to cater to the most common case of int/index slices.
-# FIXME: https://github.com/python/typing/issues/213 (replace step=start|stop with step=start&stop)
-_StepT_co = TypeVar("_StepT_co", covariant=True, default=_StartT_co | _StopT_co)  #  slice[A,B] -> slice[A, B, A|B]
+# Optional: browser GPS
+try:
+    from streamlit_js_eval import get_geolocation
 
-@disjoint_base
-class object:
-    __doc__: str | None
-    __dict__: dict[str, Any]
-    __module__: str
-    __annotations__: dict[str, Any]
-    @property
-    def __class__(self) -> type[Self]: ...
-    @__class__.setter
-    def __class__(self, type: type[Self], /) -> None: ...
-    def __init__(self) -> None: ...
-    def __new__(cls) -> Self: ...
-    # N.B. `object.__setattr__` and `object.__delattr__` are heavily special-cased by type checkers.
-    # Overriding them in subclasses has different semantics, even if the override has an identical signature.
-    def __setattr__(self, name: str, value: Any, /) -> None: ...
-    def __delattr__(self, name: str, /) -> None: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __str__(self) -> str: ...  # noqa: Y029
-    def __repr__(self) -> str: ...  # noqa: Y029
-    def __hash__(self) -> int: ...
-    def __format__(self, format_spec: str, /) -> str: ...
-    def __getattribute__(self, name: str, /) -> Any: ...
-    def __sizeof__(self) -> int: ...
-    # return type of pickle methods is rather hard to express in the current type system
-    # see #6661 and https://docs.python.org/3/library/pickle.html#object.__reduce__
-    def __reduce__(self) -> str | tuple[Any, ...]: ...
-    def __reduce_ex__(self, protocol: SupportsIndex, /) -> str | tuple[Any, ...]: ...
-    if sys.version_info >= (3, 11):
-        def __getstate__(self) -> object: ...
+    GEO_AVAILABLE = True
+except ImportError:
+    GEO_AVAILABLE = False
 
-    def __dir__(self) -> Iterable[str]: ...
-    def __init_subclass__(cls) -> None: ...
-    @classmethod
-    def __subclasshook__(cls, subclass: type, /) -> bool: ...
 
-@disjoint_base
-class staticmethod(Generic[_P, _R_co]):
-    @property
-    def __func__(self) -> Callable[_P, _R_co]: ...
-    @property
-    def __isabstractmethod__(self) -> bool: ...
-    def __init__(self, f: Callable[_P, _R_co], /) -> None: ...
-    @overload
-    def __get__(self, instance: None, owner: type, /) -> Callable[_P, _R_co]: ...
-    @overload
-    def __get__(self, instance: _T, owner: type[_T] | None = None, /) -> Callable[_P, _R_co]: ...
-    if sys.version_info >= (3, 10):
-        __name__: str
-        __qualname__: str
-        @property
-        def __wrapped__(self) -> Callable[_P, _R_co]: ...
-        def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _R_co: ...
-    if sys.version_info >= (3, 14):
-        def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-        __annotate__: AnnotateFunc | None
+# ---------- Canvas with "page x of y" ----------
+class NumberedCanvas(canvas.Canvas):
+    def __init__(self, *args, **kwargs):
+        canvas.Canvas.__init__(self, *args, **kwargs)
+        self._saved_page_states = []
 
-@disjoint_base
-class classmethod(Generic[_T, _P, _R_co]):
-    @property
-    def __func__(self) -> Callable[Concatenate[type[_T], _P], _R_co]: ...
-    @property
-    def __isabstractmethod__(self) -> bool: ...
-    def __init__(self, f: Callable[Concatenate[type[_T], _P], _R_co], /) -> None: ...
-    @overload
-    def __get__(self, instance: _T, owner: type[_T] | None = None, /) -> Callable[_P, _R_co]: ...
-    @overload
-    def __get__(self, instance: None, owner: type[_T], /) -> Callable[_P, _R_co]: ...
-    if sys.version_info >= (3, 10):
-        __name__: str
-        __qualname__: str
-        @property
-        def __wrapped__(self) -> Callable[Concatenate[type[_T], _P], _R_co]: ...
-    if sys.version_info >= (3, 14):
-        def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-        __annotate__: AnnotateFunc | None
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
 
-@disjoint_base
-class type:
-    # object.__base__ is None. Otherwise, it would be a type.
-    @property
-    def __base__(self) -> type | None: ...
-    __bases__: tuple[type, ...]
-    @property
-    def __basicsize__(self) -> int: ...
-    @property
-    def __dict__(self) -> types.MappingProxyType[str, Any]: ...  # type: ignore[override]
-    @property
-    def __dictoffset__(self) -> int: ...
-    @property
-    def __flags__(self) -> int: ...
-    @property
-    def __itemsize__(self) -> int: ...
-    __module__: str
-    @property
-    def __mro__(self) -> tuple[type, ...]: ...
-    __name__: str
-    __qualname__: str
-    @property
-    def __text_signature__(self) -> str | None: ...
-    @property
-    def __weakrefoffset__(self) -> int: ...
-    @overload
-    def __init__(self, o: object, /) -> None: ...
-    @overload
-    def __init__(self, name: str, bases: tuple[type, ...], dict: dict[str, Any], /, **kwds: Any) -> None: ...
-    @overload
-    def __new__(cls, o: object, /) -> type: ...
-    @overload
-    def __new__(
-        cls: type[_typeshed.Self], name: str, bases: tuple[type, ...], namespace: dict[str, Any], /, **kwds: Any
-    ) -> _typeshed.Self: ...
-    def __call__(self, *args: Any, **kwds: Any) -> Any: ...
-    def __subclasses__(self: _typeshed.Self) -> list[_typeshed.Self]: ...
-    # Note: the documentation doesn't specify what the return type is, the standard
-    # implementation seems to be returning a list.
-    def mro(self) -> list[type]: ...
-    def __instancecheck__(self, instance: Any, /) -> bool: ...
-    def __subclasscheck__(self, subclass: type, /) -> bool: ...
-    @classmethod
-    def __prepare__(metacls, name: str, bases: tuple[type, ...], /, **kwds: Any) -> MutableMapping[str, object]: ...
-    if sys.version_info >= (3, 10):
-        # `int | str` produces an instance of `UnionType`, but `int | int` produces an instance of `type`,
-        # and `abc.ABC | abc.ABC` produces an instance of `abc.ABCMeta`.
-        def __or__(self: _typeshed.Self, value: Any, /) -> types.UnionType | _typeshed.Self: ...
-        def __ror__(self: _typeshed.Self, value: Any, /) -> types.UnionType | _typeshed.Self: ...
-    if sys.version_info >= (3, 12):
-        __type_params__: tuple[TypeVar | ParamSpec | TypeVarTuple, ...]
-    __annotations__: dict[str, AnnotationForm]
-    if sys.version_info >= (3, 14):
-        __annotate__: AnnotateFunc | None
+    def save(self):
+        num_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self._draw_page_number(num_pages)
+            canvas.Canvas.showPage(self)
+        canvas.Canvas.save(self)
 
-@disjoint_base
-class super:
-    @overload
-    def __init__(self, t: Any, obj: Any, /) -> None: ...
-    @overload
-    def __init__(self, t: Any, /) -> None: ...
-    @overload
-    def __init__(self) -> None: ...
+    def _draw_page_number(self, page_count):
+        self.setFont("Helvetica", 8)
+        self.setFillGray(0.3)
+        text = f"{self._pageNumber} of {page_count}"
+        width = self._pagesize[0]
+        self.drawCentredString(width / 2.0, 8 * mm, text)
 
-_PositiveInteger: TypeAlias = Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-_NegativeInteger: TypeAlias = Literal[-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20]
-_LiteralInteger = _PositiveInteger | _NegativeInteger | Literal[0]  # noqa: Y026  # TODO: Use TypeAlias once mypy bugs are fixed
 
-@disjoint_base
-class int:
-    @overload
-    def __new__(cls, x: ConvertibleToInt = 0, /) -> Self: ...
-    @overload
-    def __new__(cls, x: str | bytes | bytearray, /, base: SupportsIndex) -> Self: ...
-    def as_integer_ratio(self) -> tuple[int, Literal[1]]: ...
-    @property
-    def real(self) -> int: ...
-    @property
-    def imag(self) -> Literal[0]: ...
-    @property
-    def numerator(self) -> int: ...
-    @property
-    def denominator(self) -> Literal[1]: ...
-    def conjugate(self) -> int: ...
-    def bit_length(self) -> int: ...
-    if sys.version_info >= (3, 10):
-        def bit_count(self) -> int: ...
+# ---------- Hydraulics helpers ----------
+def wetted_area_circular_m2(depth_mm, diameter_mm):
+    """Wetted area of a partially full circular pipe (m²)."""
+    if diameter_mm <= 0 or depth_mm <= 0:
+        return 0.0
 
-    if sys.version_info >= (3, 11):
-        def to_bytes(
-            self, length: SupportsIndex = 1, byteorder: Literal["little", "big"] = "big", *, signed: bool = False
-        ) -> bytes: ...
-        @classmethod
-        def from_bytes(
-            cls,
-            bytes: Iterable[SupportsIndex] | SupportsBytes | ReadableBuffer,
-            byteorder: Literal["little", "big"] = "big",
-            *,
-            signed: bool = False,
-        ) -> Self: ...
+    D = diameter_mm / 1000.0
+    r = D / 2.0
+    h = depth_mm / 1000.0
+
+    if h >= D:
+        return math.pi * r * r
+
+    return r * r * math.acos((r - h) / r) - (r - h) * math.sqrt(2 * r * h - h * h)
+
+
+def calculate_average_depth_velocity_and_flow(
+    pipe_diameter_mm,
+    depth_primary_meas,
+    depth_primary_meter,
+    vel_primary_meas,
+    vel_primary_meter,
+    extra_readings,
+):
+    """Average all depth/velocity readings and calculate flow in L/s."""
+    d_meas = [depth_primary_meas] if depth_primary_meas > 0 else []
+    d_meter = [depth_primary_meter] if depth_primary_meter > 0 else []
+    v_meas = [vel_primary_meas] if vel_primary_meas > 0 else []
+    v_meter = [vel_primary_meter] if vel_primary_meter > 0 else []
+
+    for r in extra_readings or []:
+        if r.get("depth_meas_mm", 0) > 0:
+            d_meas.append(r["depth_meas_mm"])
+        if r.get("depth_meter_mm", 0) > 0:
+            d_meter.append(r["depth_meter_mm"])
+        if r.get("vel_meas_ms", 0.0) > 0:
+            v_meas.append(r["vel_meas_ms"])
+        if r.get("vel_meter_ms", 0.0) > 0:
+            v_meter.append(r["vel_meter_ms"])
+
+    def _avg(lst):
+        return float(sum(lst) / len(lst)) if lst else 0.0
+
+    avg_d_meas = _avg(d_meas)
+    avg_d_meter = _avg(d_meter)
+    avg_v_meas = _avg(v_meas)
+    avg_v_meter = _avg(v_meter)
+
+    area_meas = wetted_area_circular_m2(avg_d_meas, pipe_diameter_mm)
+    area_meter = wetted_area_circular_m2(avg_d_meter, pipe_diameter_mm)
+
+    q_meas = area_meas * avg_v_meas * 1000.0
+    q_meter = area_meter * avg_v_meter * 1000.0
+    q_diff = q_meter - q_meas
+    q_diff_pct = (q_diff / q_meas * 100.0) if q_meas else 0.0
+
+    return {
+        "avg_depth_meas_mm": avg_d_meas,
+        "avg_depth_meter_mm": avg_d_meter,
+        "avg_vel_meas_ms": avg_v_meas,
+        "avg_vel_meter_ms": avg_v_meter,
+        "flow_meas_lps": q_meas,
+        "flow_meter_lps": q_meter,
+        "flow_diff_lps": q_diff,
+        "flow_diff_percent": q_diff_pct,
+    }
+
+
+# ---------- Static site map for PDF ----------
+def create_site_map_bytes(lat_str, lon_str, zoom=19, width_px=600, height_px=400):
+    """Zoomed-in static map for PDF."""
+    if not STATICMAP_AVAILABLE:
+        return None
+    try:
+        lat = float(str(lat_str).strip())
+        lon = float(str(lon_str).strip())
+    except Exception:
+        return None
+
+    try:
+        m = StaticMap(
+            width_px,
+            height_px,
+            url_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        )
+        marker = CircleMarker((lon, lat), "red", 12)
+        m.add_marker(marker)
+        im = m.render(zoom=zoom)
+        buf = io.BytesIO()
+        im.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+    except Exception:
+        return None
+
+
+# ---------- PDF helpers ----------
+def draw_header_bar(c, width, project, site_id, site_name):
+    margin = 20 * mm
+    bar_height = 18 * mm
+    c.setFillGray(0.9)
+    c.rect(0, A4[1] - bar_height, width, bar_height, fill=1, stroke=0)
+
+    c.setFillGray(0.0)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(margin, A4[1] - bar_height + 5 * mm, (project or "")[:80])
+
+    c.setFont("Helvetica", 10)
+    right_text = f"{site_id} – {site_name}".strip(" –")
+    c.drawRightString(width - margin, A4[1] - bar_height + 5 * mm, right_text)
+
+
+def draw_footer(c, width, client, site_name):
+    margin = 20 * mm
+    y = 14 * mm
+    c.setFont("Helvetica", 8)
+    c.setFillGray(0.3)
+
+    left_text = "Environmental Data Services – www.e-d-s.com.au | 1300 721 683"
+    client_short = (client or "")[:40]
+    site_short = (site_name or "")[:40]
+    right_text = f"Client: {client_short} | Site: {site_short}".strip(" |")
+
+    c.drawString(margin, y, left_text)
+    c.drawRightString(width - margin, y, right_text)
+
+
+def draw_section_title(c, text, x, y):
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillGray(0.1)
+    c.drawString(x, y, text)
+    c.setLineWidth(0.6)
+    c.setStrokeGray(0.6)
+    c.line(x, y - 2, x + 170 * mm, y - 2)
+
+
+def draw_wrapped_kv(
+    c,
+    label,
+    value,
+    x,
+    y,
+    line_height,
+    width_label=35 * mm,
+    max_width=170 * mm,
+    font_size=9,
+):
+    if value is None:
+        value = ""
+    value = str(value)
+
+    if label:
+        c.setFont("Helvetica-Bold", font_size)
+        c.setFillGray(0.1)
+        c.drawString(x, y, f"{label}:")
+        text_x = x + width_label
     else:
-        def to_bytes(self, length: SupportsIndex, byteorder: Literal["little", "big"], *, signed: bool = False) -> bytes: ...
-        @classmethod
-        def from_bytes(
-            cls,
-            bytes: Iterable[SupportsIndex] | SupportsBytes | ReadableBuffer,
-            byteorder: Literal["little", "big"],
-            *,
-            signed: bool = False,
-        ) -> Self: ...
-
-    if sys.version_info >= (3, 12):
-        def is_integer(self) -> Literal[True]: ...
-
-    def __add__(self, value: int, /) -> int: ...
-    def __sub__(self, value: int, /) -> int: ...
-    def __mul__(self, value: int, /) -> int: ...
-    def __floordiv__(self, value: int, /) -> int: ...
-    def __truediv__(self, value: int, /) -> float: ...
-    def __mod__(self, value: int, /) -> int: ...
-    def __divmod__(self, value: int, /) -> tuple[int, int]: ...
-    def __radd__(self, value: int, /) -> int: ...
-    def __rsub__(self, value: int, /) -> int: ...
-    def __rmul__(self, value: int, /) -> int: ...
-    def __rfloordiv__(self, value: int, /) -> int: ...
-    def __rtruediv__(self, value: int, /) -> float: ...
-    def __rmod__(self, value: int, /) -> int: ...
-    def __rdivmod__(self, value: int, /) -> tuple[int, int]: ...
-    @overload
-    def __pow__(self, x: Literal[0], /) -> Literal[1]: ...
-    @overload
-    def __pow__(self, value: Literal[0], mod: None, /) -> Literal[1]: ...
-    @overload
-    def __pow__(self, value: _PositiveInteger, mod: None = None, /) -> int: ...
-    @overload
-    def __pow__(self, value: _NegativeInteger, mod: None = None, /) -> float: ...
-    # positive __value -> int; negative __value -> float
-    # return type must be Any as `int | float` causes too many false-positive errors
-    @overload
-    def __pow__(self, value: int, mod: None = None, /) -> Any: ...
-    @overload
-    def __pow__(self, value: int, mod: int, /) -> int: ...
-    def __rpow__(self, value: int, mod: int | None = None, /) -> Any: ...
-    def __and__(self, value: int, /) -> int: ...
-    def __or__(self, value: int, /) -> int: ...
-    def __xor__(self, value: int, /) -> int: ...
-    def __lshift__(self, value: int, /) -> int: ...
-    def __rshift__(self, value: int, /) -> int: ...
-    def __rand__(self, value: int, /) -> int: ...
-    def __ror__(self, value: int, /) -> int: ...
-    def __rxor__(self, value: int, /) -> int: ...
-    def __rlshift__(self, value: int, /) -> int: ...
-    def __rrshift__(self, value: int, /) -> int: ...
-    def __neg__(self) -> int: ...
-    def __pos__(self) -> int: ...
-    def __invert__(self) -> int: ...
-    def __trunc__(self) -> int: ...
-    def __ceil__(self) -> int: ...
-    def __floor__(self) -> int: ...
-    if sys.version_info >= (3, 14):
-        def __round__(self, ndigits: SupportsIndex | None = None, /) -> int: ...
-    else:
-        def __round__(self, ndigits: SupportsIndex = ..., /) -> int: ...
-
-    def __getnewargs__(self) -> tuple[int]: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __lt__(self, value: int, /) -> bool: ...
-    def __le__(self, value: int, /) -> bool: ...
-    def __gt__(self, value: int, /) -> bool: ...
-    def __ge__(self, value: int, /) -> bool: ...
-    def __float__(self) -> float: ...
-    def __int__(self) -> int: ...
-    def __abs__(self) -> int: ...
-    def __hash__(self) -> int: ...
-    def __bool__(self) -> bool: ...
-    def __index__(self) -> int: ...
-    def __format__(self, format_spec: str, /) -> str: ...
-
-@disjoint_base
-class float:
-    def __new__(cls, x: ConvertibleToFloat = 0, /) -> Self: ...
-    def as_integer_ratio(self) -> tuple[int, int]: ...
-    def hex(self) -> str: ...
-    def is_integer(self) -> bool: ...
-    @classmethod
-    def fromhex(cls, string: str, /) -> Self: ...
-    @property
-    def real(self) -> float: ...
-    @property
-    def imag(self) -> float: ...
-    def conjugate(self) -> float: ...
-    def __add__(self, value: float, /) -> float: ...
-    def __sub__(self, value: float, /) -> float: ...
-    def __mul__(self, value: float, /) -> float: ...
-    def __floordiv__(self, value: float, /) -> float: ...
-    def __truediv__(self, value: float, /) -> float: ...
-    def __mod__(self, value: float, /) -> float: ...
-    def __divmod__(self, value: float, /) -> tuple[float, float]: ...
-    @overload
-    def __pow__(self, value: int, mod: None = None, /) -> float: ...
-    # positive __value -> float; negative __value -> complex
-    # return type must be Any as `float | complex` causes too many false-positive errors
-    @overload
-    def __pow__(self, value: float, mod: None = None, /) -> Any: ...
-    def __radd__(self, value: float, /) -> float: ...
-    def __rsub__(self, value: float, /) -> float: ...
-    def __rmul__(self, value: float, /) -> float: ...
-    def __rfloordiv__(self, value: float, /) -> float: ...
-    def __rtruediv__(self, value: float, /) -> float: ...
-    def __rmod__(self, value: float, /) -> float: ...
-    def __rdivmod__(self, value: float, /) -> tuple[float, float]: ...
-    @overload
-    def __rpow__(self, value: _PositiveInteger, mod: None = None, /) -> float: ...
-    @overload
-    def __rpow__(self, value: _NegativeInteger, mod: None = None, /) -> complex: ...
-    # Returning `complex` for the general case gives too many false-positive errors.
-    @overload
-    def __rpow__(self, value: float, mod: None = None, /) -> Any: ...
-    def __getnewargs__(self) -> tuple[float]: ...
-    def __trunc__(self) -> int: ...
-    def __ceil__(self) -> int: ...
-    def __floor__(self) -> int: ...
-    @overload
-    def __round__(self, ndigits: None = None, /) -> int: ...
-    @overload
-    def __round__(self, ndigits: SupportsIndex, /) -> float: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __lt__(self, value: float, /) -> bool: ...
-    def __le__(self, value: float, /) -> bool: ...
-    def __gt__(self, value: float, /) -> bool: ...
-    def __ge__(self, value: float, /) -> bool: ...
-    def __neg__(self) -> float: ...
-    def __pos__(self) -> float: ...
-    def __int__(self) -> int: ...
-    def __float__(self) -> float: ...
-    def __abs__(self) -> float: ...
-    def __hash__(self) -> int: ...
-    def __bool__(self) -> bool: ...
-    def __format__(self, format_spec: str, /) -> str: ...
-    if sys.version_info >= (3, 14):
-        @classmethod
-        def from_number(cls, number: float | SupportsIndex | SupportsFloat, /) -> Self: ...
-
-@disjoint_base
-class complex:
-    # Python doesn't currently accept SupportsComplex for the second argument
-    @overload
-    def __new__(
-        cls,
-        real: complex | SupportsComplex | SupportsFloat | SupportsIndex = 0,
-        imag: complex | SupportsFloat | SupportsIndex = 0,
-    ) -> Self: ...
-    @overload
-    def __new__(cls, real: str | SupportsComplex | SupportsFloat | SupportsIndex | complex) -> Self: ...
-    @property
-    def real(self) -> float: ...
-    @property
-    def imag(self) -> float: ...
-    def conjugate(self) -> complex: ...
-    def __add__(self, value: complex, /) -> complex: ...
-    def __sub__(self, value: complex, /) -> complex: ...
-    def __mul__(self, value: complex, /) -> complex: ...
-    def __pow__(self, value: complex, mod: None = None, /) -> complex: ...
-    def __truediv__(self, value: complex, /) -> complex: ...
-    def __radd__(self, value: complex, /) -> complex: ...
-    def __rsub__(self, value: complex, /) -> complex: ...
-    def __rmul__(self, value: complex, /) -> complex: ...
-    def __rpow__(self, value: complex, mod: None = None, /) -> complex: ...
-    def __rtruediv__(self, value: complex, /) -> complex: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __neg__(self) -> complex: ...
-    def __pos__(self) -> complex: ...
-    def __abs__(self) -> float: ...
-    def __hash__(self) -> int: ...
-    def __bool__(self) -> bool: ...
-    def __format__(self, format_spec: str, /) -> str: ...
-    if sys.version_info >= (3, 11):
-        def __complex__(self) -> complex: ...
-    if sys.version_info >= (3, 14):
-        @classmethod
-        def from_number(cls, number: complex | SupportsComplex | SupportsFloat | SupportsIndex, /) -> Self: ...
-
-@type_check_only
-class _FormatMapMapping(Protocol):
-    def __getitem__(self, key: str, /) -> Any: ...
-
-@type_check_only
-class _TranslateTable(Protocol):
-    def __getitem__(self, key: int, /) -> str | int | None: ...
-
-@disjoint_base
-class str(Sequence[str]):
-    @overload
-    def __new__(cls, object: object = "") -> Self: ...
-    @overload
-    def __new__(cls, object: ReadableBuffer, encoding: str = "utf-8", errors: str = "strict") -> Self: ...
-    @overload
-    def capitalize(self: LiteralString) -> LiteralString: ...
-    @overload
-    def capitalize(self) -> str: ...  # type: ignore[misc]
-    @overload
-    def casefold(self: LiteralString) -> LiteralString: ...
-    @overload
-    def casefold(self) -> str: ...  # type: ignore[misc]
-    @overload
-    def center(self: LiteralString, width: SupportsIndex, fillchar: LiteralString = " ", /) -> LiteralString: ...
-    @overload
-    def center(self, width: SupportsIndex, fillchar: str = " ", /) -> str: ...  # type: ignore[misc]
-    def count(self, sub: str, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /) -> int: ...
-    def encode(self, encoding: str = "utf-8", errors: str = "strict") -> bytes: ...
-    def endswith(
-        self, suffix: str | tuple[str, ...], start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> bool: ...
-    @overload
-    def expandtabs(self: LiteralString, tabsize: SupportsIndex = 8) -> LiteralString: ...
-    @overload
-    def expandtabs(self, tabsize: SupportsIndex = 8) -> str: ...  # type: ignore[misc]
-    def find(self, sub: str, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /) -> int: ...
-    @overload
-    def format(self: LiteralString, *args: LiteralString, **kwargs: LiteralString) -> LiteralString: ...
-    @overload
-    def format(self, *args: object, **kwargs: object) -> str: ...
-    def format_map(self, mapping: _FormatMapMapping, /) -> str: ...
-    def index(self, sub: str, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /) -> int: ...
-    def isalnum(self) -> bool: ...
-    def isalpha(self) -> bool: ...
-    def isascii(self) -> bool: ...
-    def isdecimal(self) -> bool: ...
-    def isdigit(self) -> bool: ...
-    def isidentifier(self) -> bool: ...
-    def islower(self) -> bool: ...
-    def isnumeric(self) -> bool: ...
-    def isprintable(self) -> bool: ...
-    def isspace(self) -> bool: ...
-    def istitle(self) -> bool: ...
-    def isupper(self) -> bool: ...
-    @overload
-    def join(self: LiteralString, iterable: Iterable[LiteralString], /) -> LiteralString: ...
-    @overload
-    def join(self, iterable: Iterable[str], /) -> str: ...  # type: ignore[misc]
-    @overload
-    def ljust(self: LiteralString, width: SupportsIndex, fillchar: LiteralString = " ", /) -> LiteralString: ...
-    @overload
-    def ljust(self, width: SupportsIndex, fillchar: str = " ", /) -> str: ...  # type: ignore[misc]
-    @overload
-    def lower(self: LiteralString) -> LiteralString: ...
-    @overload
-    def lower(self) -> str: ...  # type: ignore[misc]
-    @overload
-    def lstrip(self: LiteralString, chars: LiteralString | None = None, /) -> LiteralString: ...
-    @overload
-    def lstrip(self, chars: str | None = None, /) -> str: ...  # type: ignore[misc]
-    @overload
-    def partition(self: LiteralString, sep: LiteralString, /) -> tuple[LiteralString, LiteralString, LiteralString]: ...
-    @overload
-    def partition(self, sep: str, /) -> tuple[str, str, str]: ...  # type: ignore[misc]
-    if sys.version_info >= (3, 13):
-        @overload
-        def replace(
-            self: LiteralString, old: LiteralString, new: LiteralString, /, count: SupportsIndex = -1
-        ) -> LiteralString: ...
-        @overload
-        def replace(self, old: str, new: str, /, count: SupportsIndex = -1) -> str: ...  # type: ignore[misc]
-    else:
-        @overload
-        def replace(
-            self: LiteralString, old: LiteralString, new: LiteralString, count: SupportsIndex = -1, /
-        ) -> LiteralString: ...
-        @overload
-        def replace(self, old: str, new: str, count: SupportsIndex = -1, /) -> str: ...  # type: ignore[misc]
-
-    @overload
-    def removeprefix(self: LiteralString, prefix: LiteralString, /) -> LiteralString: ...
-    @overload
-    def removeprefix(self, prefix: str, /) -> str: ...  # type: ignore[misc]
-    @overload
-    def removesuffix(self: LiteralString, suffix: LiteralString, /) -> LiteralString: ...
-    @overload
-    def removesuffix(self, suffix: str, /) -> str: ...  # type: ignore[misc]
-    def rfind(self, sub: str, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /) -> int: ...
-    def rindex(self, sub: str, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /) -> int: ...
-    @overload
-    def rjust(self: LiteralString, width: SupportsIndex, fillchar: LiteralString = " ", /) -> LiteralString: ...
-    @overload
-    def rjust(self, width: SupportsIndex, fillchar: str = " ", /) -> str: ...  # type: ignore[misc]
-    @overload
-    def rpartition(self: LiteralString, sep: LiteralString, /) -> tuple[LiteralString, LiteralString, LiteralString]: ...
-    @overload
-    def rpartition(self, sep: str, /) -> tuple[str, str, str]: ...  # type: ignore[misc]
-    @overload
-    def rsplit(self: LiteralString, sep: LiteralString | None = None, maxsplit: SupportsIndex = -1) -> list[LiteralString]: ...
-    @overload
-    def rsplit(self, sep: str | None = None, maxsplit: SupportsIndex = -1) -> list[str]: ...  # type: ignore[misc]
-    @overload
-    def rstrip(self: LiteralString, chars: LiteralString | None = None, /) -> LiteralString: ...
-    @overload
-    def rstrip(self, chars: str | None = None, /) -> str: ...  # type: ignore[misc]
-    @overload
-    def split(self: LiteralString, sep: LiteralString | None = None, maxsplit: SupportsIndex = -1) -> list[LiteralString]: ...
-    @overload
-    def split(self, sep: str | None = None, maxsplit: SupportsIndex = -1) -> list[str]: ...  # type: ignore[misc]
-    @overload
-    def splitlines(self: LiteralString, keepends: bool = False) -> list[LiteralString]: ...
-    @overload
-    def splitlines(self, keepends: bool = False) -> list[str]: ...  # type: ignore[misc]
-    def startswith(
-        self, prefix: str | tuple[str, ...], start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> bool: ...
-    @overload
-    def strip(self: LiteralString, chars: LiteralString | None = None, /) -> LiteralString: ...
-    @overload
-    def strip(self, chars: str | None = None, /) -> str: ...  # type: ignore[misc]
-    @overload
-    def swapcase(self: LiteralString) -> LiteralString: ...
-    @overload
-    def swapcase(self) -> str: ...  # type: ignore[misc]
-    @overload
-    def title(self: LiteralString) -> LiteralString: ...
-    @overload
-    def title(self) -> str: ...  # type: ignore[misc]
-    def translate(self, table: _TranslateTable, /) -> str: ...
-    @overload
-    def upper(self: LiteralString) -> LiteralString: ...
-    @overload
-    def upper(self) -> str: ...  # type: ignore[misc]
-    @overload
-    def zfill(self: LiteralString, width: SupportsIndex, /) -> LiteralString: ...
-    @overload
-    def zfill(self, width: SupportsIndex, /) -> str: ...  # type: ignore[misc]
-    @staticmethod
-    @overload
-    def maketrans(x: dict[int, _T] | dict[str, _T] | dict[str | int, _T], /) -> dict[int, _T]: ...
-    @staticmethod
-    @overload
-    def maketrans(x: str, y: str, /) -> dict[int, int]: ...
-    @staticmethod
-    @overload
-    def maketrans(x: str, y: str, z: str, /) -> dict[int, int | None]: ...
-    @overload
-    def __add__(self: LiteralString, value: LiteralString, /) -> LiteralString: ...
-    @overload
-    def __add__(self, value: str, /) -> str: ...  # type: ignore[misc]
-    # Incompatible with Sequence.__contains__
-    def __contains__(self, key: str, /) -> bool: ...  # type: ignore[override]
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ge__(self, value: str, /) -> bool: ...
-    @overload
-    def __getitem__(self: LiteralString, key: SupportsIndex | slice, /) -> LiteralString: ...
-    @overload
-    def __getitem__(self, key: SupportsIndex | slice, /) -> str: ...  # type: ignore[misc]
-    def __gt__(self, value: str, /) -> bool: ...
-    def __hash__(self) -> int: ...
-    @overload
-    def __iter__(self: LiteralString) -> Iterator[LiteralString]: ...
-    @overload
-    def __iter__(self) -> Iterator[str]: ...  # type: ignore[misc]
-    def __le__(self, value: str, /) -> bool: ...
-    def __len__(self) -> int: ...
-    def __lt__(self, value: str, /) -> bool: ...
-    @overload
-    def __mod__(self: LiteralString, value: LiteralString | tuple[LiteralString, ...], /) -> LiteralString: ...
-    @overload
-    def __mod__(self, value: Any, /) -> str: ...
-    @overload
-    def __mul__(self: LiteralString, value: SupportsIndex, /) -> LiteralString: ...
-    @overload
-    def __mul__(self, value: SupportsIndex, /) -> str: ...  # type: ignore[misc]
-    def __ne__(self, value: object, /) -> bool: ...
-    @overload
-    def __rmul__(self: LiteralString, value: SupportsIndex, /) -> LiteralString: ...
-    @overload
-    def __rmul__(self, value: SupportsIndex, /) -> str: ...  # type: ignore[misc]
-    def __getnewargs__(self) -> tuple[str]: ...
-    def __format__(self, format_spec: str, /) -> str: ...
-
-@disjoint_base
-class bytes(Sequence[int]):
-    @overload
-    def __new__(cls, o: Iterable[SupportsIndex] | SupportsIndex | SupportsBytes | ReadableBuffer, /) -> Self: ...
-    @overload
-    def __new__(cls, string: str, /, encoding: str, errors: str = "strict") -> Self: ...
-    @overload
-    def __new__(cls) -> Self: ...
-    def capitalize(self) -> bytes: ...
-    def center(self, width: SupportsIndex, fillchar: bytes = b" ", /) -> bytes: ...
-    def count(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str: ...
-    def endswith(
-        self,
-        suffix: ReadableBuffer | tuple[ReadableBuffer, ...],
-        start: SupportsIndex | None = None,
-        end: SupportsIndex | None = None,
-        /,
-    ) -> bool: ...
-    def expandtabs(self, tabsize: SupportsIndex = 8) -> bytes: ...
-    def find(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def hex(self, sep: str | bytes = ..., bytes_per_sep: SupportsIndex = 1) -> str: ...
-    def index(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def isalnum(self) -> bool: ...
-    def isalpha(self) -> bool: ...
-    def isascii(self) -> bool: ...
-    def isdigit(self) -> bool: ...
-    def islower(self) -> bool: ...
-    def isspace(self) -> bool: ...
-    def istitle(self) -> bool: ...
-    def isupper(self) -> bool: ...
-    def join(self, iterable_of_bytes: Iterable[ReadableBuffer], /) -> bytes: ...
-    def ljust(self, width: SupportsIndex, fillchar: bytes | bytearray = b" ", /) -> bytes: ...
-    def lower(self) -> bytes: ...
-    def lstrip(self, bytes: ReadableBuffer | None = None, /) -> bytes: ...
-    def partition(self, sep: ReadableBuffer, /) -> tuple[bytes, bytes, bytes]: ...
-    def replace(self, old: ReadableBuffer, new: ReadableBuffer, count: SupportsIndex = -1, /) -> bytes: ...
-    def removeprefix(self, prefix: ReadableBuffer, /) -> bytes: ...
-    def removesuffix(self, suffix: ReadableBuffer, /) -> bytes: ...
-    def rfind(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def rindex(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def rjust(self, width: SupportsIndex, fillchar: bytes | bytearray = b" ", /) -> bytes: ...
-    def rpartition(self, sep: ReadableBuffer, /) -> tuple[bytes, bytes, bytes]: ...
-    def rsplit(self, sep: ReadableBuffer | None = None, maxsplit: SupportsIndex = -1) -> list[bytes]: ...
-    def rstrip(self, bytes: ReadableBuffer | None = None, /) -> bytes: ...
-    def split(self, sep: ReadableBuffer | None = None, maxsplit: SupportsIndex = -1) -> list[bytes]: ...
-    def splitlines(self, keepends: bool = False) -> list[bytes]: ...
-    def startswith(
-        self,
-        prefix: ReadableBuffer | tuple[ReadableBuffer, ...],
-        start: SupportsIndex | None = None,
-        end: SupportsIndex | None = None,
-        /,
-    ) -> bool: ...
-    def strip(self, bytes: ReadableBuffer | None = None, /) -> bytes: ...
-    def swapcase(self) -> bytes: ...
-    def title(self) -> bytes: ...
-    def translate(self, table: ReadableBuffer | None, /, delete: ReadableBuffer = b"") -> bytes: ...
-    def upper(self) -> bytes: ...
-    def zfill(self, width: SupportsIndex, /) -> bytes: ...
-    @classmethod
-    def fromhex(cls, string: str, /) -> Self: ...
-    @staticmethod
-    def maketrans(frm: ReadableBuffer, to: ReadableBuffer, /) -> bytes: ...
-    def __len__(self) -> int: ...
-    def __iter__(self) -> Iterator[int]: ...
-    def __hash__(self) -> int: ...
-    @overload
-    def __getitem__(self, key: SupportsIndex, /) -> int: ...
-    @overload
-    def __getitem__(self, key: slice, /) -> bytes: ...
-    def __add__(self, value: ReadableBuffer, /) -> bytes: ...
-    def __mul__(self, value: SupportsIndex, /) -> bytes: ...
-    def __rmul__(self, value: SupportsIndex, /) -> bytes: ...
-    def __mod__(self, value: Any, /) -> bytes: ...
-    # Incompatible with Sequence.__contains__
-    def __contains__(self, key: SupportsIndex | ReadableBuffer, /) -> bool: ...  # type: ignore[override]
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __lt__(self, value: bytes, /) -> bool: ...
-    def __le__(self, value: bytes, /) -> bool: ...
-    def __gt__(self, value: bytes, /) -> bool: ...
-    def __ge__(self, value: bytes, /) -> bool: ...
-    def __getnewargs__(self) -> tuple[bytes]: ...
-    if sys.version_info >= (3, 11):
-        def __bytes__(self) -> bytes: ...
-
-    def __buffer__(self, flags: int, /) -> memoryview: ...
-
-@disjoint_base
-class bytearray(MutableSequence[int]):
-    @overload
-    def __init__(self) -> None: ...
-    @overload
-    def __init__(self, ints: Iterable[SupportsIndex] | SupportsIndex | ReadableBuffer, /) -> None: ...
-    @overload
-    def __init__(self, string: str, /, encoding: str, errors: str = "strict") -> None: ...
-    def append(self, item: SupportsIndex, /) -> None: ...
-    def capitalize(self) -> bytearray: ...
-    def center(self, width: SupportsIndex, fillchar: bytes = b" ", /) -> bytearray: ...
-    def count(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def copy(self) -> bytearray: ...
-    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str: ...
-    def endswith(
-        self,
-        suffix: ReadableBuffer | tuple[ReadableBuffer, ...],
-        start: SupportsIndex | None = None,
-        end: SupportsIndex | None = None,
-        /,
-    ) -> bool: ...
-    def expandtabs(self, tabsize: SupportsIndex = 8) -> bytearray: ...
-    def extend(self, iterable_of_ints: Iterable[SupportsIndex], /) -> None: ...
-    def find(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def hex(self, sep: str | bytes = ..., bytes_per_sep: SupportsIndex = 1) -> str: ...
-    def index(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def insert(self, index: SupportsIndex, item: SupportsIndex, /) -> None: ...
-    def isalnum(self) -> bool: ...
-    def isalpha(self) -> bool: ...
-    def isascii(self) -> bool: ...
-    def isdigit(self) -> bool: ...
-    def islower(self) -> bool: ...
-    def isspace(self) -> bool: ...
-    def istitle(self) -> bool: ...
-    def isupper(self) -> bool: ...
-    def join(self, iterable_of_bytes: Iterable[ReadableBuffer], /) -> bytearray: ...
-    def ljust(self, width: SupportsIndex, fillchar: bytes | bytearray = b" ", /) -> bytearray: ...
-    def lower(self) -> bytearray: ...
-    def lstrip(self, bytes: ReadableBuffer | None = None, /) -> bytearray: ...
-    def partition(self, sep: ReadableBuffer, /) -> tuple[bytearray, bytearray, bytearray]: ...
-    def pop(self, index: int = -1, /) -> int: ...
-    def remove(self, value: int, /) -> None: ...
-    def removeprefix(self, prefix: ReadableBuffer, /) -> bytearray: ...
-    def removesuffix(self, suffix: ReadableBuffer, /) -> bytearray: ...
-    def replace(self, old: ReadableBuffer, new: ReadableBuffer, count: SupportsIndex = -1, /) -> bytearray: ...
-    def rfind(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def rindex(
-        self, sub: ReadableBuffer | SupportsIndex, start: SupportsIndex | None = None, end: SupportsIndex | None = None, /
-    ) -> int: ...
-    def rjust(self, width: SupportsIndex, fillchar: bytes | bytearray = b" ", /) -> bytearray: ...
-    def rpartition(self, sep: ReadableBuffer, /) -> tuple[bytearray, bytearray, bytearray]: ...
-    def rsplit(self, sep: ReadableBuffer | None = None, maxsplit: SupportsIndex = -1) -> list[bytearray]: ...
-    def rstrip(self, bytes: ReadableBuffer | None = None, /) -> bytearray: ...
-    def split(self, sep: ReadableBuffer | None = None, maxsplit: SupportsIndex = -1) -> list[bytearray]: ...
-    def splitlines(self, keepends: bool = False) -> list[bytearray]: ...
-    def startswith(
-        self,
-        prefix: ReadableBuffer | tuple[ReadableBuffer, ...],
-        start: SupportsIndex | None = None,
-        end: SupportsIndex | None = None,
-        /,
-    ) -> bool: ...
-    def strip(self, bytes: ReadableBuffer | None = None, /) -> bytearray: ...
-    def swapcase(self) -> bytearray: ...
-    def title(self) -> bytearray: ...
-    def translate(self, table: ReadableBuffer | None, /, delete: bytes = b"") -> bytearray: ...
-    def upper(self) -> bytearray: ...
-    def zfill(self, width: SupportsIndex, /) -> bytearray: ...
-    @classmethod
-    def fromhex(cls, string: str, /) -> Self: ...
-    @staticmethod
-    def maketrans(frm: ReadableBuffer, to: ReadableBuffer, /) -> bytes: ...
-    def __len__(self) -> int: ...
-    def __iter__(self) -> Iterator[int]: ...
-    __hash__: ClassVar[None]  # type: ignore[assignment]
-    @overload
-    def __getitem__(self, key: SupportsIndex, /) -> int: ...
-    @overload
-    def __getitem__(self, key: slice, /) -> bytearray: ...
-    @overload
-    def __setitem__(self, key: SupportsIndex, value: SupportsIndex, /) -> None: ...
-    @overload
-    def __setitem__(self, key: slice, value: Iterable[SupportsIndex] | bytes, /) -> None: ...
-    def __delitem__(self, key: SupportsIndex | slice, /) -> None: ...
-    def __add__(self, value: ReadableBuffer, /) -> bytearray: ...
-    # The superclass wants us to accept Iterable[int], but that fails at runtime.
-    def __iadd__(self, value: ReadableBuffer, /) -> Self: ...  # type: ignore[override]
-    def __mul__(self, value: SupportsIndex, /) -> bytearray: ...
-    def __rmul__(self, value: SupportsIndex, /) -> bytearray: ...
-    def __imul__(self, value: SupportsIndex, /) -> Self: ...
-    def __mod__(self, value: Any, /) -> bytes: ...
-    # Incompatible with Sequence.__contains__
-    def __contains__(self, key: SupportsIndex | ReadableBuffer, /) -> bool: ...  # type: ignore[override]
-    def __eq__(self, value: object, /) -> bool: ...
-    def __ne__(self, value: object, /) -> bool: ...
-    def __lt__(self, value: ReadableBuffer, /) -> bool: ...
-    def __le__(self, value: ReadableBuffer, /) -> bool: ...
-    def __gt__(self, value: ReadableBuffer, /) -> bool: ...
-    def __ge__(self, value: ReadableBuffer, /) -> bool: ...
-    def __alloc__(self) -> int: ...
-    def __buffer__(self, flags: int, /) -> memoryview: ...
-    def __release_buffer__(self, buffer: memoryview, /) -> None: ...
-    if sys.version_info >= (3, 14):
-        def resize(self, size: int, /) -> None: ...
-
-_IntegerFormats: TypeAlias = Literal[
-    "b", "B", "@b", "@B", "h", "H", "@h", "@H", "i", "I", "@i", "@I", "l", "L", "@l", "@L", "q", "Q", "@q", "@Q", "P", "@P"
-]
-
-@final
-class memoryview(Sequence[_I]):
-    @property
-    def format(self) -> str: ...
-    @property
-    def itemsize(self) -> int: ...
-    @property
-    def shape(self) -> tuple[int, ...] | None: ...
-    @property
-    def strides(self) -> tuple[int, ...] | None: ...
-    @property
-    def suboffsets(self) -> tuple[int, ...] | None: ...
-    @property
-    def readonly(self) -> bool: ...
-    @property
-    def ndim(self) -> int: ...
-    @property
-    def obj(self) -> ReadableBuffer: ...
-    @property
-    def c_contiguous(self) -> bool: ...
-    @property
-    def f_contiguous(self) -> bool: ...
-    @property
-    def contiguous(self) -> bool: ...
-    @property
-    def nbytes(self) -> int: ...
-    def __new__(cls, obj: ReadableBuffer) -> Self: ...
-    def __enter__(self) -> Self: ...
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,  # noqa: PYI036 # This is the module declaring BaseException
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-        /,
-    ) -> None: ...
-    @overload
-    def cast(self, format: Literal["c", "@c"], shape: list[int] | tuple[int, ...] = ...) -> memoryview[bytes]: ...
-    @overload
-    def cast(self, format: Literal["f", "@f", "d", "@d"], shape: list[int] | tuple[int, ...] = ...) -> memoryview[float]: ...
-    @overload
-    def cast(self, format: Literal["?"], shape: list[int] | tuple[int, ...] = ...) -> memoryview[bool]: ...
-    @overload
-    def cast(self, format: _IntegerFormats, shape: list[int] | tuple[int, ...] = ...) -> memoryview: ...
-    @overload
-    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], /) -> _I: ...
-    @overload
-    def __getitem__(self, key: slice, /) -> memoryview[_I]: ...
-    def __contains__(self, x: object, /) -> bool: ...
-    def __iter__(self) -> Iterator[_I]: ...
-    def __len__(self) -> int: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __hash__(self) -> int: ...
-    @overload
-    def __setitem__(self, key: slice, value: ReadableBuffer, /) -> None: ...
-    @overload
-    def __setitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], value: _I, /) -> None: ...
-    if sys.version_info >= (3, 10):
-        def tobytes(self, order: Literal["C", "F", "A"] | None = "C") -> bytes: ...
-    else:
-        def tobytes(self, order: Literal["C", "F", "A"] | None = None) -> bytes: ...
-
-    def tolist(self) -> list[int]: ...
-    def toreadonly(self) -> memoryview: ...
-    def release(self) -> None: ...
-    def hex(self, sep: str | bytes = ..., bytes_per_sep: SupportsIndex = 1) -> str: ...
-    def __buffer__(self, flags: int, /) -> memoryview: ...
-    def __release_buffer__(self, buffer: memoryview, /) -> None: ...
-
-    # These are inherited from the Sequence ABC, but don't actually exist on memoryview.
-    # See https://github.com/python/cpython/issues/125420
-    index: ClassVar[None]  # type: ignore[assignment]
-    count: ClassVar[None]  # type: ignore[assignment]
-    if sys.version_info >= (3, 14):
-        def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-@final
-class bool(int):
-    def __new__(cls, o: object = False, /) -> Self: ...
-    # The following overloads could be represented more elegantly with a TypeVar("_B", bool, int),
-    # however mypy has a bug regarding TypeVar constraints (https://github.com/python/mypy/issues/11880).
-    @overload
-    def __and__(self, value: bool, /) -> bool: ...
-    @overload
-    def __and__(self, value: int, /) -> int: ...
-    @overload
-    def __or__(self, value: bool, /) -> bool: ...
-    @overload
-    def __or__(self, value: int, /) -> int: ...
-    @overload
-    def __xor__(self, value: bool, /) -> bool: ...
-    @overload
-    def __xor__(self, value: int, /) -> int: ...
-    @overload
-    def __rand__(self, value: bool, /) -> bool: ...
-    @overload
-    def __rand__(self, value: int, /) -> int: ...
-    @overload
-    def __ror__(self, value: bool, /) -> bool: ...
-    @overload
-    def __ror__(self, value: int, /) -> int: ...
-    @overload
-    def __rxor__(self, value: bool, /) -> bool: ...
-    @overload
-    def __rxor__(self, value: int, /) -> int: ...
-    def __getnewargs__(self) -> tuple[int]: ...
-    @deprecated("Will throw an error in Python 3.16. Use `not` for logical negation of bools instead.")
-    def __invert__(self) -> int: ...
-
-@final
-class slice(Generic[_StartT_co, _StopT_co, _StepT_co]):
-    @property
-    def start(self) -> _StartT_co: ...
-    @property
-    def step(self) -> _StepT_co: ...
-    @property
-    def stop(self) -> _StopT_co: ...
-    # Note: __new__ overloads map `None` to `Any`, since users expect slice(x, None)
-    #  to be compatible with slice(None, x).
-    # generic slice --------------------------------------------------------------------
-    @overload
-    def __new__(cls, start: None, stop: None = None, step: None = None, /) -> slice[Any, Any, Any]: ...
-    # unary overloads ------------------------------------------------------------------
-    @overload
-    def __new__(cls, stop: _T2, /) -> slice[Any, _T2, Any]: ...
-    # binary overloads -----------------------------------------------------------------
-    @overload
-    def __new__(cls, start: _T1, stop: None, step: None = None, /) -> slice[_T1, Any, Any]: ...
-    @overload
-    def __new__(cls, start: None, stop: _T2, step: None = None, /) -> slice[Any, _T2, Any]: ...
-    @overload
-    def __new__(cls, start: _T1, stop: _T2, step: None = None, /) -> slice[_T1, _T2, Any]: ...
-    # ternary overloads ----------------------------------------------------------------
-    @overload
-    def __new__(cls, start: None, stop: None, step: _T3, /) -> slice[Any, Any, _T3]: ...
-    @overload
-    def __new__(cls, start: _T1, stop: None, step: _T3, /) -> slice[_T1, Any, _T3]: ...
-    @overload
-    def __new__(cls, start: None, stop: _T2, step: _T3, /) -> slice[Any, _T2, _T3]: ...
-    @overload
-    def __new__(cls, start: _T1, stop: _T2, step: _T3, /) -> slice[_T1, _T2, _T3]: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    if sys.version_info >= (3, 12):
-        def __hash__(self) -> int: ...
-    else:
-        __hash__: ClassVar[None]  # type: ignore[assignment]
-
-    def indices(self, len: SupportsIndex, /) -> tuple[int, int, int]: ...
-
-@disjoint_base
-class tuple(Sequence[_T_co]):
-    def __new__(cls, iterable: Iterable[_T_co] = (), /) -> Self: ...
-    def __len__(self) -> int: ...
-    def __contains__(self, key: object, /) -> bool: ...
-    @overload
-    def __getitem__(self, key: SupportsIndex, /) -> _T_co: ...
-    @overload
-    def __getitem__(self, key: slice, /) -> tuple[_T_co, ...]: ...
-    def __iter__(self) -> Iterator[_T_co]: ...
-    def __lt__(self, value: tuple[_T_co, ...], /) -> bool: ...
-    def __le__(self, value: tuple[_T_co, ...], /) -> bool: ...
-    def __gt__(self, value: tuple[_T_co, ...], /) -> bool: ...
-    def __ge__(self, value: tuple[_T_co, ...], /) -> bool: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __hash__(self) -> int: ...
-    @overload
-    def __add__(self, value: tuple[_T_co, ...], /) -> tuple[_T_co, ...]: ...
-    @overload
-    def __add__(self, value: tuple[_T, ...], /) -> tuple[_T_co | _T, ...]: ...
-    def __mul__(self, value: SupportsIndex, /) -> tuple[_T_co, ...]: ...
-    def __rmul__(self, value: SupportsIndex, /) -> tuple[_T_co, ...]: ...
-    def count(self, value: Any, /) -> int: ...
-    def index(self, value: Any, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize, /) -> int: ...
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-# Doesn't exist at runtime, but deleting this breaks mypy and pyright. See:
-# https://github.com/python/typeshed/issues/7580
-# https://github.com/python/mypy/issues/8240
-# Obsolete, use types.FunctionType instead.
-@final
-@type_check_only
-class function:
-    # Make sure this class definition stays roughly in line with `types.FunctionType`
-    @property
-    def __closure__(self) -> tuple[CellType, ...] | None: ...
-    __code__: CodeType
-    __defaults__: tuple[Any, ...] | None
-    __dict__: dict[str, Any]
-    @property
-    def __globals__(self) -> dict[str, Any]: ...
-    __name__: str
-    __qualname__: str
-    __annotations__: dict[str, AnnotationForm]
-    if sys.version_info >= (3, 14):
-        __annotate__: AnnotateFunc | None
-    __kwdefaults__: dict[str, Any] | None
-    if sys.version_info >= (3, 10):
-        @property
-        def __builtins__(self) -> dict[str, Any]: ...
-    if sys.version_info >= (3, 12):
-        __type_params__: tuple[TypeVar | ParamSpec | TypeVarTuple, ...]
-
-    __module__: str
-    if sys.version_info >= (3, 13):
-        def __new__(
-            cls,
-            code: CodeType,
-            globals: dict[str, Any],
-            name: str | None = None,
-            argdefs: tuple[object, ...] | None = None,
-            closure: tuple[CellType, ...] | None = None,
-            kwdefaults: dict[str, object] | None = None,
-        ) -> Self: ...
-    else:
-        def __new__(
-            cls,
-            code: CodeType,
-            globals: dict[str, Any],
-            name: str | None = None,
-            argdefs: tuple[object, ...] | None = None,
-            closure: tuple[CellType, ...] | None = None,
-        ) -> Self: ...
-
-    # mypy uses `builtins.function.__get__` to represent methods, properties, and getset_descriptors so we type the return as Any.
-    def __get__(self, instance: object, owner: type | None = None, /) -> Any: ...
-
-@disjoint_base
-class list(MutableSequence[_T]):
-    @overload
-    def __init__(self) -> None: ...
-    @overload
-    def __init__(self, iterable: Iterable[_T], /) -> None: ...
-    def copy(self) -> list[_T]: ...
-    def append(self, object: _T, /) -> None: ...
-    def extend(self, iterable: Iterable[_T], /) -> None: ...
-    def pop(self, index: SupportsIndex = -1, /) -> _T: ...
-    # Signature of `list.index` should be kept in line with `collections.UserList.index()`
-    # and multiprocessing.managers.ListProxy.index()
-    def index(self, value: _T, start: SupportsIndex = 0, stop: SupportsIndex = sys.maxsize, /) -> int: ...
-    def count(self, value: _T, /) -> int: ...
-    def insert(self, index: SupportsIndex, object: _T, /) -> None: ...
-    def remove(self, value: _T, /) -> None: ...
-    # Signature of `list.sort` should be kept inline with `collections.UserList.sort()`
-    # and multiprocessing.managers.ListProxy.sort()
-    #
-    # Use list[SupportsRichComparisonT] for the first overload rather than [SupportsRichComparison]
-    # to work around invariance
-    @overload
-    def sort(self: list[SupportsRichComparisonT], *, key: None = None, reverse: bool = False) -> None: ...
-    @overload
-    def sort(self, *, key: Callable[[_T], SupportsRichComparison], reverse: bool = False) -> None: ...
-    def __len__(self) -> int: ...
-    def __iter__(self) -> Iterator[_T]: ...
-    __hash__: ClassVar[None]  # type: ignore[assignment]
-    @overload
-    def __getitem__(self, i: SupportsIndex, /) -> _T: ...
-    @overload
-    def __getitem__(self, s: slice, /) -> list[_T]: ...
-    @overload
-    def __setitem__(self, key: SupportsIndex, value: _T, /) -> None: ...
-    @overload
-    def __setitem__(self, key: slice, value: Iterable[_T], /) -> None: ...
-    def __delitem__(self, key: SupportsIndex | slice, /) -> None: ...
-    # Overloading looks unnecessary, but is needed to work around complex mypy problems
-    @overload
-    def __add__(self, value: list[_T], /) -> list[_T]: ...
-    @overload
-    def __add__(self, value: list[_S], /) -> list[_S | _T]: ...
-    def __iadd__(self, value: Iterable[_T], /) -> Self: ...  # type: ignore[misc]
-    def __mul__(self, value: SupportsIndex, /) -> list[_T]: ...
-    def __rmul__(self, value: SupportsIndex, /) -> list[_T]: ...
-    def __imul__(self, value: SupportsIndex, /) -> Self: ...
-    def __contains__(self, key: object, /) -> bool: ...
-    def __reversed__(self) -> Iterator[_T]: ...
-    def __gt__(self, value: list[_T], /) -> bool: ...
-    def __ge__(self, value: list[_T], /) -> bool: ...
-    def __lt__(self, value: list[_T], /) -> bool: ...
-    def __le__(self, value: list[_T], /) -> bool: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-@disjoint_base
-class dict(MutableMapping[_KT, _VT]):
-    # __init__ should be kept roughly in line with `collections.UserDict.__init__`, which has similar semantics
-    # Also multiprocessing.managers.SyncManager.dict()
-    @overload
-    def __init__(self) -> None: ...
-    @overload
-    def __init__(self: dict[str, _VT], **kwargs: _VT) -> None: ...  # pyright: ignore[reportInvalidTypeVarUse]  #11780
-    @overload
-    def __init__(self, map: SupportsKeysAndGetItem[_KT, _VT], /) -> None: ...
-    @overload
-    def __init__(
-        self: dict[str, _VT],  # pyright: ignore[reportInvalidTypeVarUse]  #11780
-        map: SupportsKeysAndGetItem[str, _VT],
-        /,
-        **kwargs: _VT,
-    ) -> None: ...
-    @overload
-    def __init__(self, iterable: Iterable[tuple[_KT, _VT]], /) -> None: ...
-    @overload
-    def __init__(
-        self: dict[str, _VT],  # pyright: ignore[reportInvalidTypeVarUse]  #11780
-        iterable: Iterable[tuple[str, _VT]],
-        /,
-        **kwargs: _VT,
-    ) -> None: ...
-    # Next two overloads are for dict(string.split(sep) for string in iterable)
-    # Cannot be Iterable[Sequence[_T]] or otherwise dict(["foo", "bar", "baz"]) is not an error
-    @overload
-    def __init__(self: dict[str, str], iterable: Iterable[list[str]], /) -> None: ...
-    @overload
-    def __init__(self: dict[bytes, bytes], iterable: Iterable[list[bytes]], /) -> None: ...
-    def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
-    def copy(self) -> dict[_KT, _VT]: ...
-    def keys(self) -> dict_keys[_KT, _VT]: ...
-    def values(self) -> dict_values[_KT, _VT]: ...
-    def items(self) -> dict_items[_KT, _VT]: ...
-    # Signature of `dict.fromkeys` should be kept identical to
-    # `fromkeys` methods of `OrderedDict`/`ChainMap`/`UserDict` in `collections`
-    # TODO: the true signature of `dict.fromkeys` is not expressible in the current type system.
-    # See #3800 & https://github.com/python/typing/issues/548#issuecomment-683336963.
-    @classmethod
-    @overload
-    def fromkeys(cls, iterable: Iterable[_T], value: None = None, /) -> dict[_T, Any | None]: ...
-    @classmethod
-    @overload
-    def fromkeys(cls, iterable: Iterable[_T], value: _S, /) -> dict[_T, _S]: ...
-    # Positional-only in dict, but not in MutableMapping
-    @overload  # type: ignore[override]
-    def get(self, key: _KT, default: None = None, /) -> _VT | None: ...
-    @overload
-    def get(self, key: _KT, default: _VT, /) -> _VT: ...
-    @overload
-    def get(self, key: _KT, default: _T, /) -> _VT | _T: ...
-    @overload
-    def pop(self, key: _KT, /) -> _VT: ...
-    @overload
-    def pop(self, key: _KT, default: _VT, /) -> _VT: ...
-    @overload
-    def pop(self, key: _KT, default: _T, /) -> _VT | _T: ...
-    def __len__(self) -> int: ...
-    def __getitem__(self, key: _KT, /) -> _VT: ...
-    def __setitem__(self, key: _KT, value: _VT, /) -> None: ...
-    def __delitem__(self, key: _KT, /) -> None: ...
-    def __iter__(self) -> Iterator[_KT]: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __reversed__(self) -> Iterator[_KT]: ...
-    __hash__: ClassVar[None]  # type: ignore[assignment]
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-    @overload
-    def __or__(self, value: dict[_KT, _VT], /) -> dict[_KT, _VT]: ...
-    @overload
-    def __or__(self, value: dict[_T1, _T2], /) -> dict[_KT | _T1, _VT | _T2]: ...
-    @overload
-    def __ror__(self, value: dict[_KT, _VT], /) -> dict[_KT, _VT]: ...
-    @overload
-    def __ror__(self, value: dict[_T1, _T2], /) -> dict[_KT | _T1, _VT | _T2]: ...
-    # dict.__ior__ should be kept roughly in line with MutableMapping.update()
-    @overload  # type: ignore[misc]
-    def __ior__(self, value: SupportsKeysAndGetItem[_KT, _VT], /) -> Self: ...
-    @overload
-    def __ior__(self, value: Iterable[tuple[_KT, _VT]], /) -> Self: ...
-
-@disjoint_base
-class set(MutableSet[_T]):
-    @overload
-    def __init__(self) -> None: ...
-    @overload
-    def __init__(self, iterable: Iterable[_T], /) -> None: ...
-    def add(self, element: _T, /) -> None: ...
-    def copy(self) -> set[_T]: ...
-    def difference(self, *s: Iterable[Any]) -> set[_T]: ...
-    def difference_update(self, *s: Iterable[Any]) -> None: ...
-    def discard(self, element: _T, /) -> None: ...
-    def intersection(self, *s: Iterable[Any]) -> set[_T]: ...
-    def intersection_update(self, *s: Iterable[Any]) -> None: ...
-    def isdisjoint(self, s: Iterable[Any], /) -> bool: ...
-    def issubset(self, s: Iterable[Any], /) -> bool: ...
-    def issuperset(self, s: Iterable[Any], /) -> bool: ...
-    def remove(self, element: _T, /) -> None: ...
-    def symmetric_difference(self, s: Iterable[_T], /) -> set[_T]: ...
-    def symmetric_difference_update(self, s: Iterable[_T], /) -> None: ...
-    def union(self, *s: Iterable[_S]) -> set[_T | _S]: ...
-    def update(self, *s: Iterable[_T]) -> None: ...
-    def __len__(self) -> int: ...
-    def __contains__(self, o: object, /) -> bool: ...
-    def __iter__(self) -> Iterator[_T]: ...
-    def __and__(self, value: AbstractSet[object], /) -> set[_T]: ...
-    def __iand__(self, value: AbstractSet[object], /) -> Self: ...
-    def __or__(self, value: AbstractSet[_S], /) -> set[_T | _S]: ...
-    def __ior__(self, value: AbstractSet[_T], /) -> Self: ...  # type: ignore[override,misc]
-    def __sub__(self, value: AbstractSet[_T | None], /) -> set[_T]: ...
-    def __isub__(self, value: AbstractSet[object], /) -> Self: ...
-    def __xor__(self, value: AbstractSet[_S], /) -> set[_T | _S]: ...
-    def __ixor__(self, value: AbstractSet[_T], /) -> Self: ...  # type: ignore[override,misc]
-    def __le__(self, value: AbstractSet[object], /) -> bool: ...
-    def __lt__(self, value: AbstractSet[object], /) -> bool: ...
-    def __ge__(self, value: AbstractSet[object], /) -> bool: ...
-    def __gt__(self, value: AbstractSet[object], /) -> bool: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    __hash__: ClassVar[None]  # type: ignore[assignment]
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-@disjoint_base
-class frozenset(AbstractSet[_T_co]):
-    @overload
-    def __new__(cls) -> Self: ...
-    @overload
-    def __new__(cls, iterable: Iterable[_T_co], /) -> Self: ...
-    def copy(self) -> frozenset[_T_co]: ...
-    def difference(self, *s: Iterable[object]) -> frozenset[_T_co]: ...
-    def intersection(self, *s: Iterable[object]) -> frozenset[_T_co]: ...
-    def isdisjoint(self, s: Iterable[_T_co], /) -> bool: ...
-    def issubset(self, s: Iterable[object], /) -> bool: ...
-    def issuperset(self, s: Iterable[object], /) -> bool: ...
-    def symmetric_difference(self, s: Iterable[_T_co], /) -> frozenset[_T_co]: ...
-    def union(self, *s: Iterable[_S]) -> frozenset[_T_co | _S]: ...
-    def __len__(self) -> int: ...
-    def __contains__(self, o: object, /) -> bool: ...
-    def __iter__(self) -> Iterator[_T_co]: ...
-    def __and__(self, value: AbstractSet[_T_co], /) -> frozenset[_T_co]: ...
-    def __or__(self, value: AbstractSet[_S], /) -> frozenset[_T_co | _S]: ...
-    def __sub__(self, value: AbstractSet[_T_co], /) -> frozenset[_T_co]: ...
-    def __xor__(self, value: AbstractSet[_S], /) -> frozenset[_T_co | _S]: ...
-    def __le__(self, value: AbstractSet[object], /) -> bool: ...
-    def __lt__(self, value: AbstractSet[object], /) -> bool: ...
-    def __ge__(self, value: AbstractSet[object], /) -> bool: ...
-    def __gt__(self, value: AbstractSet[object], /) -> bool: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __hash__(self) -> int: ...
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-@disjoint_base
-class enumerate(Generic[_T]):
-    def __new__(cls, iterable: Iterable[_T], start: int = 0) -> Self: ...
-    def __iter__(self) -> Self: ...
-    def __next__(self) -> tuple[int, _T]: ...
-    def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-@final
-class range(Sequence[int]):
-    @property
-    def start(self) -> int: ...
-    @property
-    def stop(self) -> int: ...
-    @property
-    def step(self) -> int: ...
-    @overload
-    def __new__(cls, stop: SupportsIndex, /) -> Self: ...
-    @overload
-    def __new__(cls, start: SupportsIndex, stop: SupportsIndex, step: SupportsIndex = 1, /) -> Self: ...
-    def count(self, value: int, /) -> int: ...
-    def index(self, value: int, /) -> int: ...  # type: ignore[override]
-    def __len__(self) -> int: ...
-    def __eq__(self, value: object, /) -> bool: ...
-    def __hash__(self) -> int: ...
-    def __contains__(self, key: object, /) -> bool: ...
-    def __iter__(self) -> Iterator[int]: ...
-    @overload
-    def __getitem__(self, key: SupportsIndex, /) -> int: ...
-    @overload
-    def __getitem__(self, key: slice, /) -> range: ...
-    def __reversed__(self) -> Iterator[int]: ...
-
-@disjoint_base
-class property:
-    fget: Callable[[Any], Any] | None
-    fset: Callable[[Any, Any], None] | None
-    fdel: Callable[[Any], None] | None
-    __isabstractmethod__: bool
-    if sys.version_info >= (3, 13):
-        __name__: str
-
-    def __init__(
-        self,
-        fget: Callable[[Any], Any] | None = None,
-        fset: Callable[[Any, Any], None] | None = None,
-        fdel: Callable[[Any], None] | None = None,
-        doc: str | None = None,
-    ) -> None: ...
-    def getter(self, fget: Callable[[Any], Any], /) -> property: ...
-    def setter(self, fset: Callable[[Any, Any], None], /) -> property: ...
-    def deleter(self, fdel: Callable[[Any], None], /) -> property: ...
-    @overload
-    def __get__(self, instance: None, owner: type, /) -> Self: ...
-    @overload
-    def __get__(self, instance: Any, owner: type | None = None, /) -> Any: ...
-    def __set__(self, instance: Any, value: Any, /) -> None: ...
-    def __delete__(self, instance: Any, /) -> None: ...
-
-@final
-@type_check_only
-class _NotImplementedType(Any):
-    __call__: None
-
-NotImplemented: _NotImplementedType
-
-def abs(x: SupportsAbs[_T], /) -> _T: ...
-def all(iterable: Iterable[object], /) -> bool: ...
-def any(iterable: Iterable[object], /) -> bool: ...
-def ascii(obj: object, /) -> str: ...
-def bin(number: int | SupportsIndex, /) -> str: ...
-def breakpoint(*args: Any, **kws: Any) -> None: ...
-def callable(obj: object, /) -> TypeIs[Callable[..., object]]: ...
-def chr(i: int | SupportsIndex, /) -> str: ...
-
-if sys.version_info >= (3, 10):
-    def aiter(async_iterable: SupportsAiter[_SupportsAnextT_co], /) -> _SupportsAnextT_co: ...
-    @type_check_only
-    class _SupportsSynchronousAnext(Protocol[_AwaitableT_co]):
-        def __anext__(self) -> _AwaitableT_co: ...
-
-    @overload
-    # `anext` is not, in fact, an async function. When default is not provided
-    # `anext` is just a passthrough for `obj.__anext__`
-    # See discussion in #7491 and pure-Python implementation of `anext` at https://github.com/python/cpython/blob/ea786a882b9ed4261eafabad6011bc7ef3b5bf94/Lib/test/test_asyncgen.py#L52-L80
-    def anext(i: _SupportsSynchronousAnext[_AwaitableT], /) -> _AwaitableT: ...
-    @overload
-    async def anext(i: SupportsAnext[_T], default: _VT, /) -> _T | _VT: ...
-
-# compile() returns a CodeType, unless the flags argument includes PyCF_ONLY_AST (=1024),
-# in which case it returns ast.AST. We have overloads for flag 0 (the default) and for
-# explicitly passing PyCF_ONLY_AST. We fall back to Any for other values of flags.
-@overload
-def compile(
-    source: str | ReadableBuffer | _ast.Module | _ast.Expression | _ast.Interactive,
-    filename: str | bytes | PathLike[Any],
-    mode: str,
-    flags: Literal[0],
-    dont_inherit: bool = False,
-    optimize: int = -1,
-    *,
-    _feature_version: int = -1,
-) -> CodeType: ...
-@overload
-def compile(
-    source: str | ReadableBuffer | _ast.Module | _ast.Expression | _ast.Interactive,
-    filename: str | bytes | PathLike[Any],
-    mode: str,
-    *,
-    dont_inherit: bool = False,
-    optimize: int = -1,
-    _feature_version: int = -1,
-) -> CodeType: ...
-@overload
-def compile(
-    source: str | ReadableBuffer | _ast.Module | _ast.Expression | _ast.Interactive,
-    filename: str | bytes | PathLike[Any],
-    mode: str,
-    flags: Literal[1024],
-    dont_inherit: bool = False,
-    optimize: int = -1,
-    *,
-    _feature_version: int = -1,
-) -> _ast.AST: ...
-@overload
-def compile(
-    source: str | ReadableBuffer | _ast.Module | _ast.Expression | _ast.Interactive,
-    filename: str | bytes | PathLike[Any],
-    mode: str,
-    flags: int,
-    dont_inherit: bool = False,
-    optimize: int = -1,
-    *,
-    _feature_version: int = -1,
-) -> Any: ...
-
-copyright: _sitebuiltins._Printer
-credits: _sitebuiltins._Printer
-
-def delattr(obj: object, name: str, /) -> None: ...
-def dir(o: object = ..., /) -> list[str]: ...
-@overload
-def divmod(x: SupportsDivMod[_T_contra, _T_co], y: _T_contra, /) -> _T_co: ...
-@overload
-def divmod(x: _T_contra, y: SupportsRDivMod[_T_contra, _T_co], /) -> _T_co: ...
-
-# The `globals` argument to `eval` has to be `dict[str, Any]` rather than `dict[str, object]` due to invariance.
-# (The `globals` argument has to be a "real dict", rather than any old mapping, unlike the `locals` argument.)
-if sys.version_info >= (3, 13):
-    def eval(
-        source: str | ReadableBuffer | CodeType,
-        /,
-        globals: dict[str, Any] | None = None,
-        locals: Mapping[str, object] | None = None,
-    ) -> Any: ...
-
-else:
-    def eval(
-        source: str | ReadableBuffer | CodeType,
-        globals: dict[str, Any] | None = None,
-        locals: Mapping[str, object] | None = None,
-        /,
-    ) -> Any: ...
-
-# Comment above regarding `eval` applies to `exec` as well
-if sys.version_info >= (3, 13):
-    def exec(
-        source: str | ReadableBuffer | CodeType,
-        /,
-        globals: dict[str, Any] | None = None,
-        locals: Mapping[str, object] | None = None,
-        *,
-        closure: tuple[CellType, ...] | None = None,
-    ) -> None: ...
-
-elif sys.version_info >= (3, 11):
-    def exec(
-        source: str | ReadableBuffer | CodeType,
-        globals: dict[str, Any] | None = None,
-        locals: Mapping[str, object] | None = None,
-        /,
-        *,
-        closure: tuple[CellType, ...] | None = None,
-    ) -> None: ...
-
-else:
-    def exec(
-        source: str | ReadableBuffer | CodeType,
-        globals: dict[str, Any] | None = None,
-        locals: Mapping[str, object] | None = None,
-        /,
-    ) -> None: ...
-
-exit: _sitebuiltins.Quitter
-
-@disjoint_base
-class filter(Generic[_T]):
-    @overload
-    def __new__(cls, function: None, iterable: Iterable[_T | None], /) -> Self: ...
-    @overload
-    def __new__(cls, function: Callable[[_S], TypeGuard[_T]], iterable: Iterable[_S], /) -> Self: ...
-    @overload
-    def __new__(cls, function: Callable[[_S], TypeIs[_T]], iterable: Iterable[_S], /) -> Self: ...
-    @overload
-    def __new__(cls, function: Callable[[_T], Any], iterable: Iterable[_T], /) -> Self: ...
-    def __iter__(self) -> Self: ...
-    def __next__(self) -> _T: ...
-
-def format(value: object, format_spec: str = "", /) -> str: ...
-@overload
-def getattr(o: object, name: str, /) -> Any: ...
-
-# While technically covered by the last overload, spelling out the types for None, bool
-# and basic containers help mypy out in some tricky situations involving type context
-# (aka bidirectional inference)
-@overload
-def getattr(o: object, name: str, default: None, /) -> Any | None: ...
-@overload
-def getattr(o: object, name: str, default: bool, /) -> Any | bool: ...
-@overload
-def getattr(o: object, name: str, default: list[Any], /) -> Any | list[Any]: ...
-@overload
-def getattr(o: object, name: str, default: dict[Any, Any], /) -> Any | dict[Any, Any]: ...
-@overload
-def getattr(o: object, name: str, default: _T, /) -> Any | _T: ...
-def globals() -> dict[str, Any]: ...
-def hasattr(obj: object, name: str, /) -> bool: ...
-def hash(obj: object, /) -> int: ...
-
-help: _sitebuiltins._Helper
-
-def hex(number: int | SupportsIndex, /) -> str: ...
-def id(obj: object, /) -> int: ...
-def input(prompt: object = "", /) -> str: ...
-@type_check_only
-class _GetItemIterable(Protocol[_T_co]):
-    def __getitem__(self, i: int, /) -> _T_co: ...
-
-@overload
-def iter(object: SupportsIter[_SupportsNextT_co], /) -> _SupportsNextT_co: ...
-@overload
-def iter(object: _GetItemIterable[_T], /) -> Iterator[_T]: ...
-@overload
-def iter(object: Callable[[], _T | None], sentinel: None, /) -> Iterator[_T]: ...
-@overload
-def iter(object: Callable[[], _T], sentinel: object, /) -> Iterator[_T]: ...
-
-if sys.version_info >= (3, 10):
-    _ClassInfo: TypeAlias = type | types.UnionType | tuple[_ClassInfo, ...]
-else:
-    _ClassInfo: TypeAlias = type | tuple[_ClassInfo, ...]
-
-def isinstance(obj: object, class_or_tuple: _ClassInfo, /) -> bool: ...
-def issubclass(cls: type, class_or_tuple: _ClassInfo, /) -> bool: ...
-def len(obj: Sized, /) -> int: ...
-
-license: _sitebuiltins._Printer
-
-def locals() -> dict[str, Any]: ...
-@disjoint_base
-class map(Generic[_S]):
-    # 3.14 adds `strict` argument.
-    if sys.version_info >= (3, 14):
-        @overload
-        def __new__(cls, func: Callable[[_T1], _S], iterable: Iterable[_T1], /, *, strict: bool = False) -> Self: ...
-        @overload
-        def __new__(
-            cls, func: Callable[[_T1, _T2], _S], iterable: Iterable[_T1], iter2: Iterable[_T2], /, *, strict: bool = False
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[[_T1, _T2, _T3], _S],
-            iterable: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            /,
-            *,
-            strict: bool = False,
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[[_T1, _T2, _T3, _T4], _S],
-            iterable: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            /,
-            *,
-            strict: bool = False,
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[[_T1, _T2, _T3, _T4, _T5], _S],
-            iterable: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            iter5: Iterable[_T5],
-            /,
-            *,
-            strict: bool = False,
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[..., _S],
-            iterable: Iterable[Any],
-            iter2: Iterable[Any],
-            iter3: Iterable[Any],
-            iter4: Iterable[Any],
-            iter5: Iterable[Any],
-            iter6: Iterable[Any],
-            /,
-            *iterables: Iterable[Any],
-            strict: bool = False,
-        ) -> Self: ...
-    else:
-        @overload
-        def __new__(cls, func: Callable[[_T1], _S], iterable: Iterable[_T1], /) -> Self: ...
-        @overload
-        def __new__(cls, func: Callable[[_T1, _T2], _S], iterable: Iterable[_T1], iter2: Iterable[_T2], /) -> Self: ...
-        @overload
-        def __new__(
-            cls, func: Callable[[_T1, _T2, _T3], _S], iterable: Iterable[_T1], iter2: Iterable[_T2], iter3: Iterable[_T3], /
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[[_T1, _T2, _T3, _T4], _S],
-            iterable: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            /,
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[[_T1, _T2, _T3, _T4, _T5], _S],
-            iterable: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            iter5: Iterable[_T5],
-            /,
-        ) -> Self: ...
-        @overload
-        def __new__(
-            cls,
-            func: Callable[..., _S],
-            iterable: Iterable[Any],
-            iter2: Iterable[Any],
-            iter3: Iterable[Any],
-            iter4: Iterable[Any],
-            iter5: Iterable[Any],
-            iter6: Iterable[Any],
-            /,
-            *iterables: Iterable[Any],
-        ) -> Self: ...
-
-    def __iter__(self) -> Self: ...
-    def __next__(self) -> _S: ...
-
-@overload
-def max(
-    arg1: SupportsRichComparisonT, arg2: SupportsRichComparisonT, /, *_args: SupportsRichComparisonT, key: None = None
-) -> SupportsRichComparisonT: ...
-@overload
-def max(arg1: _T, arg2: _T, /, *_args: _T, key: Callable[[_T], SupportsRichComparison]) -> _T: ...
-@overload
-def max(iterable: Iterable[SupportsRichComparisonT], /, *, key: None = None) -> SupportsRichComparisonT: ...
-@overload
-def max(iterable: Iterable[_T], /, *, key: Callable[[_T], SupportsRichComparison]) -> _T: ...
-@overload
-def max(iterable: Iterable[SupportsRichComparisonT], /, *, key: None = None, default: _T) -> SupportsRichComparisonT | _T: ...
-@overload
-def max(iterable: Iterable[_T1], /, *, key: Callable[[_T1], SupportsRichComparison], default: _T2) -> _T1 | _T2: ...
-@overload
-def min(
-    arg1: SupportsRichComparisonT, arg2: SupportsRichComparisonT, /, *_args: SupportsRichComparisonT, key: None = None
-) -> SupportsRichComparisonT: ...
-@overload
-def min(arg1: _T, arg2: _T, /, *_args: _T, key: Callable[[_T], SupportsRichComparison]) -> _T: ...
-@overload
-def min(iterable: Iterable[SupportsRichComparisonT], /, *, key: None = None) -> SupportsRichComparisonT: ...
-@overload
-def min(iterable: Iterable[_T], /, *, key: Callable[[_T], SupportsRichComparison]) -> _T: ...
-@overload
-def min(iterable: Iterable[SupportsRichComparisonT], /, *, key: None = None, default: _T) -> SupportsRichComparisonT | _T: ...
-@overload
-def min(iterable: Iterable[_T1], /, *, key: Callable[[_T1], SupportsRichComparison], default: _T2) -> _T1 | _T2: ...
-@overload
-def next(i: SupportsNext[_T], /) -> _T: ...
-@overload
-def next(i: SupportsNext[_T], default: _VT, /) -> _T | _VT: ...
-def oct(number: int | SupportsIndex, /) -> str: ...
-
-_Opener: TypeAlias = Callable[[str, int], int]
-
-# Text mode: always returns a TextIOWrapper
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenTextMode = "r",
-    buffering: int = -1,
-    encoding: str | None = None,
-    errors: str | None = None,
-    newline: str | None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> TextIOWrapper: ...
-
-# Unbuffered binary mode: returns a FileIO
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenBinaryMode,
-    buffering: Literal[0],
-    encoding: None = None,
-    errors: None = None,
-    newline: None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> FileIO: ...
-
-# Buffering is on: return BufferedRandom, BufferedReader, or BufferedWriter
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenBinaryModeUpdating,
-    buffering: Literal[-1, 1] = -1,
-    encoding: None = None,
-    errors: None = None,
-    newline: None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> BufferedRandom: ...
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenBinaryModeWriting,
-    buffering: Literal[-1, 1] = -1,
-    encoding: None = None,
-    errors: None = None,
-    newline: None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> BufferedWriter: ...
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenBinaryModeReading,
-    buffering: Literal[-1, 1] = -1,
-    encoding: None = None,
-    errors: None = None,
-    newline: None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> BufferedReader: ...
-
-# Buffering cannot be determined: fall back to BinaryIO
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: OpenBinaryMode,
-    buffering: int = -1,
-    encoding: None = None,
-    errors: None = None,
-    newline: None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> BinaryIO: ...
-
-# Fallback if mode is not specified
-@overload
-def open(
-    file: FileDescriptorOrPath,
-    mode: str,
-    buffering: int = -1,
-    encoding: str | None = None,
-    errors: str | None = None,
-    newline: str | None = None,
-    closefd: bool = True,
-    opener: _Opener | None = None,
-) -> IO[Any]: ...
-def ord(c: str | bytes | bytearray, /) -> int: ...
-@type_check_only
-class _SupportsWriteAndFlush(SupportsWrite[_T_contra], SupportsFlush, Protocol[_T_contra]): ...
-
-@overload
-def print(
-    *values: object,
-    sep: str | None = " ",
-    end: str | None = "\n",
-    file: SupportsWrite[str] | None = None,
-    flush: Literal[False] = False,
-) -> None: ...
-@overload
-def print(
-    *values: object, sep: str | None = " ", end: str | None = "\n", file: _SupportsWriteAndFlush[str] | None = None, flush: bool
-) -> None: ...
-
-_E_contra = TypeVar("_E_contra", contravariant=True)
-_M_contra = TypeVar("_M_contra", contravariant=True)
-
-@type_check_only
-class _SupportsPow2(Protocol[_E_contra, _T_co]):
-    def __pow__(self, other: _E_contra, /) -> _T_co: ...
-
-@type_check_only
-class _SupportsPow3NoneOnly(Protocol[_E_contra, _T_co]):
-    def __pow__(self, other: _E_contra, modulo: None = None, /) -> _T_co: ...
-
-@type_check_only
-class _SupportsPow3(Protocol[_E_contra, _M_contra, _T_co]):
-    def __pow__(self, other: _E_contra, modulo: _M_contra, /) -> _T_co: ...
-
-_SupportsSomeKindOfPow = (  # noqa: Y026  # TODO: Use TypeAlias once mypy bugs are fixed
-    _SupportsPow2[Any, Any] | _SupportsPow3NoneOnly[Any, Any] | _SupportsPow3[Any, Any, Any]
+        text_x = x + 5 * mm
+
+    c.setFont("Helvetica", font_size)
+    c.setFillGray(0.0)
+
+    max_text_width = max_width - (text_x - x)
+    words = value.split()
+    if not words:
+        return y - line_height
+
+    line = ""
+    y_out = y
+    for w in words:
+        test_line = (line + " " + w).strip()
+        w_width = stringWidth(test_line, "Helvetica", font_size)
+        if w_width <= max_text_width:
+            line = test_line
+        else:
+            c.drawString(text_x, y_out, line)
+            y_out -= line_height
+            line = w
+    if line:
+        c.drawString(text_x, y_out, line)
+        y_out -= line_height
+
+    return y_out - 0.3 * line_height
+
+
+# ---------- Per-site PDF pages ----------
+def draw_site_main_page(c, site, width, height):
+    margin = 22 * mm
+    line_height = 6 * mm
+
+    draw_header_bar(
+        c,
+        width,
+        site.get("project_name", "Project"),
+        site.get("site_id", ""),
+        site.get("site_name", ""),
+    )
+    y = height - 55 * mm
+
+    # 1. Project details
+    draw_section_title(c, "1. Project", margin, y)
+    y -= line_height * 1.5
+    y = draw_wrapped_kv(c, "Client", site.get("client", ""), margin, y, line_height)
+    y = draw_wrapped_kv(
+        c, "Catchment", site.get("catchment", ""), margin, y, line_height
+    )
+    y = draw_wrapped_kv(
+        c,
+        "Install date/time",
+        f"{site.get('install_date','')} {site.get('install_time','')}",
+        margin,
+        y,
+        line_height,
+    )
+    asset_line = (
+        f"Client asset ID: {site.get('client_asset_id','')}  |  "
+        f"GIS ID: {site.get('gis_id','')}"
+    )
+    y = draw_wrapped_kv(c, "Asset IDs", asset_line, margin, y, line_height)
+    gps_line = f"Lat {site.get('gps_lat','')}  |  Lon {site.get('gps_lon','')}"
+    y = draw_wrapped_kv(c, "GPS", gps_line, margin, y, line_height)
+    if site.get("site_address"):
+        y = draw_wrapped_kv(c, "Site address", site.get("site_address", ""), margin, y, line_height)
+    y -= line_height * 0.5
+
+    # 2. Manhole, location & safety
+    draw_section_title(c, "2. Manhole, Location & Safety", margin, y)
+    y -= line_height * 1.5
+    y = draw_wrapped_kv(
+        c,
+        "Location description",
+        site.get("manhole_location_desc", ""),
+        margin,
+        y,
+        line_height,
+    )
+    loc_line = (
+        f"{site.get('access_type','')} | "
+        f"Confined space: {'Yes' if site.get('confined_space_required') else 'No'}; "
+        f"Traffic control: {'Yes' if site.get('traffic_control_required') else 'No'}"
+    )
+    y = draw_wrapped_kv(c, "Access / permits", loc_line, margin, y, line_height)
+    y = draw_wrapped_kv(
+        c,
+        "Safety constraints",
+        site.get("access_safety_constraints", ""),
+        margin,
+        y,
+        line_height,
+    )
+    if site.get("other_permits_required"):
+        y = draw_wrapped_kv(
+            c,
+            "Other permits",
+            site.get("other_permits_required", ""),
+            margin,
+            y,
+            line_height,
+        )
+    y -= line_height * 0.5
+
+    # 3. Pipe & hydraulics
+    draw_section_title(c, "3. Pipe & Hydraulic Assessment", margin, y)
+    y -= line_height * 1.5
+    pipe_desc = (
+        f"{site.get('pipe_diameter_mm','')} mm, "
+        f"{site.get('pipe_material','')}, "
+        f"{site.get('pipe_shape','')}"
+    )
+    y = draw_wrapped_kv(c, "Pipe", pipe_desc, margin, y, line_height)
+
+    inv_line = f"Invert depth: {site.get('depth_to_invert_mm','')} mm"
+    soffit = site.get("depth_to_soffit_mm", "")
+    if soffit not in ("", None):
+        inv_line += f"; Soffit: {soffit} mm"
+    y = draw_wrapped_kv(c, "Depths", inv_line, margin, y, line_height)
+
+    y = draw_wrapped_kv(
+        c,
+        "Upstream config",
+        site.get("upstream_config", ""),
+        margin,
+        y,
+        line_height,
+    )
+    y = draw_wrapped_kv(
+        c,
+        "Downstream config",
+        site.get("downstream_config", ""),
+        margin,
+        y,
+        line_height,
+    )
+
+    drops = "Yes" if site.get("hydro_drops") else "No"
+    bends = "Yes" if site.get("hydro_bends") else "No"
+    juncs = "Yes" if site.get("hydro_junctions") else "No"
+    surch = "Yes" if site.get("hydro_surcharge_risk") else "No"
+    backw = "Yes" if site.get("hydro_backwater_risk") else "No"
+    hydro_line1 = (
+        f"Turbulence: {site.get('hydro_turbulence_level','')} | "
+        f"Drops near meter: {drops}; Bends near meter: {bends}; "
+        f"Junctions within 5D: {juncs}"
+    )
+    hydro_line2 = f"Surcharge risk: {surch}; Backwater risk: {backw}"
+    y = draw_wrapped_kv(c, "Hydraulics (1)", hydro_line1, margin, y, line_height)
+    y = draw_wrapped_kv(c, "Hydraulics (2)", hydro_line2, margin, y, line_height)
+    y = draw_wrapped_kv(
+        c,
+        "Hydraulic comments",
+        site.get("hydraulic_notes", ""),
+        margin,
+        y,
+        line_height,
+    )
+
+    draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+    c.showPage()
+
+
+def draw_site_commissioning_page(c, site, width, height):
+    margin = 22 * mm
+    line_height = 6 * mm
+
+    draw_header_bar(
+        c,
+        width,
+        site.get("project_name", "Project"),
+        site.get("site_id", ""),
+        site.get("site_name", ""),
+    )
+    y = height - 55 * mm
+
+    # 4. Meter, sensor & configuration
+    draw_section_title(c, "4. Meter, Sensor & Configuration", margin, y)
+    y -= line_height * 1.5
+    y = draw_wrapped_kv(
+        c, "Meter model", site.get("meter_model", ""), margin, y, line_height
+    )
+    y = draw_wrapped_kv(
+        c, "Logger serial", site.get("logger_serial", ""), margin, y, line_height
+    )
+    y = draw_wrapped_kv(
+        c, "Sensor serial", site.get("sensor_serial", ""), margin, y, line_height
+    )
+    pos_line = (
+        f"{site.get('sensor_distance_from_manhole_m','')} m from manhole; "
+        f"Orientation: {site.get('sensor_orientation','')}; "
+        f"Mount: {site.get('sensor_mount_type','')}"
+    )
+    y = draw_wrapped_kv(c, "Sensor position", pos_line, margin, y, line_height)
+    y = draw_wrapped_kv(
+        c,
+        "Datum reference",
+        site.get("datum_reference_desc", ""),
+        margin,
+        y,
+        line_height,
+    )
+
+    cfg_line1 = (
+        f"Level range: {site.get('level_range_min_mm','')}–"
+        f"{site.get('level_range_max_mm','')} mm; "
+        f"Velocity range: {site.get('velocity_range_min_ms','')}–"
+        f"{site.get('velocity_range_max_ms','')} m/s"
+    )
+    y = draw_wrapped_kv(c, "Ranges", cfg_line1, margin, y, line_height)
+    y = draw_wrapped_kv(
+        c,
+        "Output scaling",
+        site.get("output_scaling_desc", ""),
+        margin,
+        y,
+        line_height,
+    )
+
+    telem_line1 = (
+        f"Comms: {site.get('comms_method','')}; "
+        f"Logger ID: {site.get('telemetry_logger_id','')}"
+    )
+    telem_line2 = (
+        f"Platform: {site.get('telemetry_server','')}; "
+        f"Notes: {site.get('telemetry_notes','')}"
+    )
+    y = draw_wrapped_kv(c, "Telemetry (1)", telem_line1, margin, y, line_height)
+    y = draw_wrapped_kv(c, "Telemetry (2)", telem_line2, margin, y, line_height)
+
+    log_line = (
+        f"Logging interval: {site.get('logging_interval_min','')} min; "
+        f"Time zone: {site.get('timezone','')}"
+    )
+    y = draw_wrapped_kv(c, "Logging", log_line, margin, y, line_height)
+    y -= line_height * 0.5
+
+    # 5. Commissioning checks
+    draw_section_title(c, "5. Commissioning Checks", margin, y)
+    y -= line_height * 1.5
+    depth_line = (
+        f"Measured: {site.get('depth_check_meas_mm','')} mm, "
+        f"Meter: {site.get('depth_check_meter_mm','')} mm, "
+        f"Diff: {site.get('depth_check_diff_mm','')} mm, "
+        f"Within tolerance: {site.get('depth_check_within_tol','')}"
+    )
+    y = draw_wrapped_kv(c, "Depth", depth_line, margin, y, line_height)
+    vel_line = (
+        f"Measured: {site.get('vel_check_meas_ms','')} m/s, "
+        f"Meter: {site.get('vel_check_meter_ms','')} m/s, "
+        f"Diff: {site.get('vel_check_diff_ms','')} m/s"
+    )
+    y = draw_wrapped_kv(c, "Velocity", vel_line, margin, y, line_height)
+
+    comms_line = f"{site.get('comms_verified','')} at {site.get('comms_verified_at','')}"
+    y = draw_wrapped_kv(c, "Comms", comms_line, margin, y, line_height)
+
+    zero_line = (
+        f"Zero-depth check performed: "
+        f"{'Yes' if site.get('zero_depth_check_done') else 'No'}; "
+        f"Notes: {site.get('zero_depth_check_notes','')}"
+    )
+    y = draw_wrapped_kv(c, "Zero-depth check", zero_line, margin, y, line_height)
+
+    ref_line = (
+        f"Reference device: {site.get('reference_device_type','')} "
+        f"({site.get('reference_device_id','')}); "
+        f"Comparison: {site.get('reference_reading_desc','')}"
+    )
+    y = draw_wrapped_kv(c, "Reference check", ref_line, margin, y, line_height)
+
+    # Additional verification readings
+    extra = site.get("verification_readings", []) or []
+    if extra:
+        y -= line_height * 0.5
+        draw_section_title(c, "6. Additional Verification Readings", margin, y)
+        y -= line_height * 1.5
+        for i, r in enumerate(extra):
+            y = draw_wrapped_kv(c, f"Test {i + 1}", "", margin, y, line_height)
+            depth_txt = (
+                f"Measured {r.get('depth_meas_mm','')} mm / "
+                f"Meter {r.get('depth_meter_mm','')} mm"
+            )
+            y = draw_wrapped_kv(
+                c, "Depth", depth_txt, margin + 8 * mm, y, line_height
+            )
+            vel_txt = (
+                f"Measured {r.get('vel_meas_ms','')} m/s / "
+                f"Meter {r.get('vel_meter_ms','')} m/s"
+            )
+            y = draw_wrapped_kv(
+                c, "Velocity", vel_txt, margin + 8 * mm, y, line_height
+            )
+            if r.get("comment"):
+                y = draw_wrapped_kv(
+                    c,
+                    "Notes",
+                    r.get("comment", ""),
+                    margin + 8 * mm,
+                    y,
+                    line_height,
+                )
+            y -= line_height * 0.4
+
+    # Derived flow numbers
+    flow_meas = site.get("flow_meas_lps", 0.0)
+    flow_meter = site.get("flow_meter_lps", 0.0)
+    flow_diff = site.get("flow_diff_lps", 0.0)
+    flow_diff_pct = site.get("flow_diff_percent", 0.0)
+    avg_d_meas = site.get("avg_depth_meas_mm", 0.0)
+    avg_d_meter = site.get("avg_depth_meter_mm", 0.0)
+    avg_v_meas = site.get("avg_vel_meas_ms", 0.0)
+    avg_v_meter = site.get("avg_vel_meter_ms", 0.0)
+
+    flow_meas_line = (
+        f"{flow_meas:.2f} L/s "
+        f"(Avg depth {avg_d_meas:.1f} mm, Avg velocity {avg_v_meas:.2f} m/s)"
+        if flow_meas
+        else "N/A"
+    )
+    flow_meter_line = (
+        f"{flow_meter:.2f} L/s "
+        f"(Avg depth {avg_d_meter:.1f} mm, Avg velocity {avg_v_meter:.2f} m/s)"
+        if flow_meter
+        else "N/A"
+    )
+    flow_diff_line = (
+        f"{flow_diff:.2f} L/s ({flow_diff_pct:.1f} %)"
+        if (flow_meas or flow_meter)
+        else "N/A"
+    )
+
+    y -= line_height * 0.5
+    draw_section_title(c, "7. Flow (for model calibration)", margin, y)
+    y -= line_height * 1.5
+    y = draw_wrapped_kv(c, "Flow (manual)", flow_meas_line, margin, y, line_height)
+    y = draw_wrapped_kv(c, "Flow (meter)", flow_meter_line, margin, y, line_height)
+    y = draw_wrapped_kv(c, "Difference", flow_diff_line, margin, y, line_height)
+    y -= line_height * 0.5
+
+    # Calibration suitability & notes
+    draw_section_title(c, "8. Calibration Suitability & Modelling Notes", margin, y)
+    y -= line_height * 1.5
+    y = draw_wrapped_kv(
+        c, "Overall rating", site.get("calibration_rating", ""), margin, y, line_height
+    )
+    y = draw_wrapped_kv(
+        c,
+        "Suitability comment",
+        site.get("calibration_comment", ""),
+        margin,
+        y,
+        line_height,
+    )
+    y = draw_wrapped_kv(
+        c,
+        "Modelling notes",
+        site.get("modelling_notes", ""),
+        margin,
+        y,
+        line_height,
+    )
+    y = draw_wrapped_kv(
+        c,
+        "Data quality risks",
+        site.get("data_quality_risks", ""),
+        margin,
+        y,
+        line_height,
+    )
+    y -= line_height * 0.5
+
+    # Installer checklist
+    checklist_flags = []
+    if site.get("chk_sensor_in_main_flow"):
+        checklist_flags.append("Sensor in main flow path")
+    if site.get("chk_no_immediate_drops"):
+        checklist_flags.append("No immediate drops / turbulence at sensor")
+    if site.get("chk_depth_range_ok"):
+        checklist_flags.append("Depth/velocity ranges suitable")
+    if site.get("chk_logging_started"):
+        checklist_flags.append("Logging started and confirmed")
+    if site.get("chk_comms_checked_platform"):
+        checklist_flags.append("Comms/data visible on platform")
+
+    chk_text = "; ".join(checklist_flags) if checklist_flags else "Not recorded"
+    y = draw_wrapped_kv(
+        c, "Installer checklist", chk_text, margin, y, line_height, width_label=40 * mm
+    )
+    y -= line_height * 0.5
+
+    # Diagrams, map and reporting – next page
+    draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+    c.showPage()
+
+    margin = 22 * mm
+    line_height = 6 * mm
+    draw_header_bar(
+        c,
+        width,
+        site.get("project_name", "Project"),
+        site.get("site_id", ""),
+        site.get("site_name", ""),
+    )
+    y = height - 55 * mm
+    max_w = width - 2 * margin
+    max_diag_h = 70 * mm
+    max_map_h = 60 * mm
+
+    section_idx = 9
+
+    # Manhole / site diagram
+    diagram = site.get("diagram")
+    if diagram:
+        draw_section_title(c, f"{section_idx}. Manhole / Site Diagram", margin, y)
+        y -= line_height * 1.5
+
+        img_bytes = io.BytesIO(diagram["data"])
+        img = ImageReader(img_bytes)
+        iw, ih = img.getSize()
+        scale = min(max_w / iw, max_diag_h / ih)
+        w = iw * scale
+        h = ih * scale
+        x = margin + (max_w - w) / 2
+
+        c.drawImage(
+            img,
+            x,
+            y - h,
+            width=w,
+            height=h,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+
+        c.setFont("Helvetica", 8)
+        caption = diagram.get("name", "Manhole / site diagram")
+        c.drawCentredString(x + w / 2, y - h - 3 * mm, caption[:120])
+
+        y = y - h - 10 * mm
+        section_idx += 1
+
+    # Static site map (zoomed)
+    map_buf = create_site_map_bytes(site.get("gps_lat"), site.get("gps_lon"), zoom=19)
+    if map_buf:
+        if y - max_map_h < 40 * mm:
+            draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+            c.showPage()
+            draw_header_bar(
+                c,
+                width,
+                site.get("project_name", "Project"),
+                site.get("site_id", ""),
+                site.get("site_name", ""),
+            )
+            y = height - 55 * mm
+
+        draw_section_title(c, f"{section_idx}. Site location map", margin, y)
+        y -= line_height * 1.5
+
+        map_img = ImageReader(map_buf)
+        iw, ih = map_img.getSize()
+        scale = min(max_w / iw, max_map_h / ih)
+        w = iw * scale
+        h = ih * scale
+        x = margin + (max_w - w) / 2
+
+        c.drawImage(
+            map_img,
+            x,
+            y - h,
+            width=w,
+            height=h,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+
+        y = y - h - 10 * mm
+        section_idx += 1
+
+    # Reporting details
+    if y < 60 * mm:
+        draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+        c.showPage()
+        draw_header_bar(
+            c,
+            width,
+            site.get("project_name", "Project"),
+            site.get("site_id", ""),
+            site.get("site_name", ""),
+        )
+        y = height - 55 * mm
+
+    draw_section_title(c, f"{section_idx}. Reporting", margin, y)
+    y -= line_height * 1.5
+
+    prepared_line = (
+        f"Prepared by: {site.get('prepared_by','')} "
+        f"({site.get('prepared_position','')}) "
+        f"on {site.get('prepared_date','')}"
+    )
+    y = draw_wrapped_kv(c, "", prepared_line, margin, y, line_height, width_label=5 * mm)
+
+    reviewed_line = (
+        f"Reviewed by: {site.get('reviewed_by','')} "
+        f"({site.get('reviewed_position','')}) "
+        f"on {site.get('reviewed_date','')}"
+    )
+    y = draw_wrapped_kv(c, "", reviewed_line, margin, y, line_height, width_label=5 * mm)
+
+    draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+    c.showPage()
+
+
+def draw_site_photos(c, site, photos, width, height):
+    """Render ALL uploaded site photos with centred captions."""
+    if not photos:
+        return
+
+    margin = 22 * mm
+    line_height = 6 * mm
+    max_w = width - 2 * margin
+    max_h = 55 * mm
+
+    def start_page(first=False):
+        draw_header_bar(
+            c,
+            width,
+            site.get("project_name", "Project"),
+            site.get("site_id", ""),
+            site.get("site_name", ""),
+        )
+        y0 = height - 55 * mm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(
+            margin,
+            y0,
+            "Site Photos" if first else "Site Photos (continued)",
+        )
+        return y0 - line_height * 2
+
+    y = start_page(first=True)
+
+    for p in photos:
+        if y - max_h < 25 * mm:
+            draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+            c.showPage()
+            y = start_page(first=False)
+
+        img_bytes = io.BytesIO(p["data"])
+        img = ImageReader(img_bytes)
+        iw, ih = img.getSize()
+        scale = min(max_w / iw, max_h / ih)
+        w = iw * scale
+        h = ih * scale
+        x = margin + (max_w - w) / 2
+
+        c.drawImage(
+            img,
+            x,
+            y - h,
+            width=w,
+            height=h,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+
+        c.setFont("Helvetica", 8)
+        caption = (p.get("name") or "Site photo").strip()
+        c.drawCentredString(x + w / 2, y - h - 3 * mm, caption[:160])
+
+        y = y - h - 10 * mm
+
+    draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+    c.showPage()
+
+
+def create_pdf_bytes(sites):
+    buf = io.BytesIO()
+    c = NumberedCanvas(buf, pagesize=A4)
+    width, height = A4
+
+    for s in sites:
+        draw_site_main_page(c, s, width, height)
+        draw_site_commissioning_page(c, s, width, height)
+        draw_site_photos(c, s, s.get("photos", []) or [], width, height)
+
+    c.save()
+    buf.seek(0)
+    pdf_bytes = buf.getvalue()
+
+    # Try to embed a JSON metadata attachment (site data) for reliable round-trip
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        writer = PdfWriter()
+        for p in reader.pages:
+            writer.add_page(p)
+
+        # Prepare compact metadata (exclude large binary fields)
+        meta_sites = []
+        for s in sites:
+            copy = {k: v for k, v in s.items() if k not in ("verification_readings", "photos", "diagram")}
+            meta_sites.append(copy)
+
+        meta_json = json.dumps(meta_sites, default=str)
+        # add_attachment is available in PyPDF2 v3+; falls back if not present
+        try:
+            writer.add_attachment("site_data.json", meta_json.encode("utf-8"))
+        except Exception:
+            # Older PyPDF2 might use a different API; skip embedding if unavailable
+            pass
+
+        out = io.BytesIO()
+        writer.write(out)
+        out.seek(0)
+        return out
+    except Exception:
+        # If embedding fails or PyPDF2 isn't available, return the original bytes
+        out = io.BytesIO(pdf_bytes)
+        out.seek(0)
+        return out
+
+
+# ---------- Excel export ----------
+def create_excel_bytes(sites):
+    flat_sites = []
+    for s in sites:
+        copy = {
+            k: v
+            for k, v in s.items()
+            if k not in ("verification_readings", "photos", "diagram")
+        }
+        flat_sites.append(copy)
+
+    df = pd.DataFrame(flat_sites)
+    cols = [
+        "project_name",
+        "client",
+        "catchment",
+        "site_id",
+        "site_name",
+        "client_asset_id",
+        "gis_id",
+        "install_date",
+        "install_time",
+        "meter_model",
+        "pipe_diameter_mm",
+        "pipe_material",
+        "pipe_shape",
+        "depth_to_invert_mm",
+        "gps_lat",
+        "gps_lon",
+        "logging_interval_min",
+        "comms_method",
+        "comms_verified",
+        "calibration_rating",
+        "avg_depth_meas_mm",
+        "avg_depth_meter_mm",
+        "avg_vel_meas_ms",
+        "avg_vel_meter_ms",
+        "flow_meas_lps",
+        "flow_meter_lps",
+        "flow_diff_lps",
+        "flow_diff_percent",
+        "hydro_turbulence_level",
+        "hydro_drops",
+        "hydro_bends",
+        "hydro_junctions",
+        "hydro_surcharge_risk",
+        "hydro_backwater_risk",
+        "modelling_notes",
+        "data_quality_risks",
+    ]
+    cols = [c for c in cols if c in df.columns]
+    df = df[cols]
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        df.to_excel(w, sheet_name="Sites Summary", index=False)
+    buf.seek(0)
+    return buf
+
+
+# ---------- Streamlit UI ----------
+st.set_page_config(
+    page_title="Sewer Flow Meter Installation Reporter",
+    layout="wide",
 )
 
-# TODO: `pow(int, int, Literal[0])` fails at runtime,
-# but adding a `NoReturn` overload isn't a good solution for expressing that (see #8566).
-@overload
-def pow(base: int, exp: int, mod: int) -> int: ...
-@overload
-def pow(base: int, exp: Literal[0], mod: None = None) -> Literal[1]: ...
-@overload
-def pow(base: int, exp: _PositiveInteger, mod: None = None) -> int: ...
-@overload
-def pow(base: int, exp: _NegativeInteger, mod: None = None) -> float: ...
+EDS_PRIMARY = "#00507A"
+EDS_SECONDARY = "#007A7A"
+EDS_LIGHT_BG = "#f5f7fb"
+EDS_CARD_BG = "#ffffff"
+EDS_BORDER = "#d9e2ef"
 
-# int base & positive-int exp -> int; int base & negative-int exp -> float
-# return type must be Any as `int | float` causes too many false-positive errors
-@overload
-def pow(base: int, exp: int, mod: None = None) -> Any: ...
-@overload
-def pow(base: _PositiveInteger, exp: float, mod: None = None) -> float: ...
-@overload
-def pow(base: _NegativeInteger, exp: float, mod: None = None) -> complex: ...
-@overload
-def pow(base: float, exp: int, mod: None = None) -> float: ...
 
-# float base & float exp could return float or complex
-# return type must be Any (same as complex base, complex exp),
-# as `float | complex` causes too many false-positive errors
-@overload
-def pow(base: float, exp: complex | _SupportsSomeKindOfPow, mod: None = None) -> Any: ...
-@overload
-def pow(base: complex, exp: complex | _SupportsSomeKindOfPow, mod: None = None) -> complex: ...
-@overload
-def pow(base: _SupportsPow2[_E_contra, _T_co], exp: _E_contra, mod: None = None) -> _T_co: ...  # type: ignore[overload-overlap]
-@overload
-def pow(base: _SupportsPow3NoneOnly[_E_contra, _T_co], exp: _E_contra, mod: None = None) -> _T_co: ...  # type: ignore[overload-overlap]
-@overload
-def pow(base: _SupportsPow3[_E_contra, _M_contra, _T_co], exp: _E_contra, mod: _M_contra) -> _T_co: ...
-@overload
-def pow(base: _SupportsSomeKindOfPow, exp: float, mod: None = None) -> Any: ...
-@overload
-def pow(base: _SupportsSomeKindOfPow, exp: complex, mod: None = None) -> complex: ...
+def safe_rerun():
+    """Try to rerun the Streamlit app in a safe, backwards-compatible way.
 
-quit: _sitebuiltins.Quitter
+    Preference order:
+    1. Call `st.experimental_rerun()` if present.
+    2. Raise Streamlit's internal `RerunException` if available.
+    3. Toggle a session-state flag and set a query param as a last-resort hint.
+    """
+    # Preferred public API (may be missing in some Streamlit versions)
+    if hasattr(st, "experimental_rerun"):
+        try:
+            st.experimental_rerun()
+            return
+        except Exception:
+            # fall through to internal fallback
+            pass
 
-@disjoint_base
-class reversed(Generic[_T]):
-    @overload
-    def __new__(cls, sequence: Reversible[_T], /) -> Iterator[_T]: ...  # type: ignore[misc]
-    @overload
-    def __new__(cls, sequence: SupportsLenAndGetItem[_T], /) -> Iterator[_T]: ...  # type: ignore[misc]
-    def __iter__(self) -> Self: ...
-    def __next__(self) -> _T: ...
-    def __length_hint__(self) -> int: ...
+    # Internal API fallback (may change across Streamlit releases)
+    try:
+        from streamlit.runtime.scriptrunner.script_runner import RerunException
 
-def repr(obj: object, /) -> str: ...
+        raise RerunException()
+    except Exception:
+        # Best-effort fallback: toggle a session key and update query params
+        st.session_state["_force_rerun_toggle"] = not st.session_state.get(
+            "_force_rerun_toggle", False
+        )
+        try:
+            # Use a timestamp query param to encourage the frontend to reload
+            st.query_params["_rerun"] = str(int(_time.time()))
+        except Exception:
+            # Nothing else we can safely do
+            return
 
-# See https://github.com/python/typeshed/pull/9141
-# and https://github.com/python/typeshed/pull/9151
-# on why we don't use `SupportsRound` from `typing.pyi`
 
-@type_check_only
-class _SupportsRound1(Protocol[_T_co]):
-    def __round__(self) -> _T_co: ...
+def get_address_from_coords(lat: float, lon: float) -> str:
+    """Use reverse geocoding (Nominatim) to get street address from lat/lon.
+    
+    Returns the address string on success, or a placeholder on failure.
+    """
+    try:
+        from geopy.geocoders import Nominatim
+        geolocator = Nominatim(user_agent="eds_sewer_reporter")
+        location = geolocator.reverse(f"{lat}, {lon}", language="en")
+        return location.address if location else ""
+    except Exception:
+        # If geocoding fails, return empty string (user can fill manually)
+        return ""
 
-@type_check_only
-class _SupportsRound2(Protocol[_T_co]):
-    def __round__(self, ndigits: int, /) -> _T_co: ...
 
-@overload
-def round(number: _SupportsRound1[_T], ndigits: None = None) -> _T: ...
-@overload
-def round(number: _SupportsRound2[_T], ndigits: SupportsIndex) -> _T: ...
+def parse_pdf_report(file_bytes: bytes) -> dict:
+    """Attempt to parse a PDF report generated by this app and return a
+    dictionary of site fields to prepopulate the form.
 
-# See https://github.com/python/typeshed/pull/6292#discussion_r748875189
-# for why arg 3 of `setattr` should be annotated with `Any` and not `object`
-def setattr(obj: object, name: str, value: Any, /) -> None: ...
-@overload
-def sorted(
-    iterable: Iterable[SupportsRichComparisonT], /, *, key: None = None, reverse: bool = False
-) -> list[SupportsRichComparisonT]: ...
-@overload
-def sorted(iterable: Iterable[_T], /, *, key: Callable[[_T], SupportsRichComparison], reverse: bool = False) -> list[_T]: ...
+    This is a best-effort parser: it uses PyPDF2 to extract text and then
+    looks for common labels. If PyPDF2 is not available, it returns None
+    and the UI will ask the user to install the dependency.
+    """
+    try:
+        from PyPDF2 import PdfReader
+    except Exception:
+        return {"_error": "missing_pyPDF2"}
 
-_AddableT1 = TypeVar("_AddableT1", bound=SupportsAdd[Any, Any])
-_AddableT2 = TypeVar("_AddableT2", bound=SupportsAdd[Any, Any])
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        text_pages = []
+        for p in reader.pages:
+            try:
+                txt = p.extract_text() or ""
+            except Exception:
+                txt = ""
+            text_pages.append(txt)
+        full_text = "\n".join(text_pages)
+    except Exception:
+        return {"_error": "parse_failed"}
 
-@type_check_only
-class _SupportsSumWithNoDefaultGiven(SupportsAdd[Any, Any], SupportsRAdd[int, Any], Protocol): ...
+    # Mapping of keys to label variants to search for
+    label_map = {
+        "project_name": ["Project", "Project name"],
+        "client": ["Client"],
+        "site_name": ["Site / manhole name", "Site name", "Site"],
+        "site_id": ["Site ID", "SiteID", "Manhole", "Manhole number"],
+        "client_asset_id": ["Client asset ID"],
+        "gis_id": ["GIS ID"],
+        "install_date": ["Install date", "Installed on", "Install Date"],
+        "install_time": ["Install time", "Install Time"],
+        "gps_lat": ["GPS latitude", "GPS Latitude", "Lat"],
+        "gps_lon": ["GPS longitude", "GPS Longitude", "Lon"],
+        "manhole_location_desc": ["Location description", "Location"] ,
+        "prepared_by": ["Prepared by"],
+    }
 
-_SupportsSumNoDefaultT = TypeVar("_SupportsSumNoDefaultT", bound=_SupportsSumWithNoDefaultGiven)
+    parsed = {}
+    import re
 
-# In general, the return type of `x + x` is *not* guaranteed to be the same type as x.
-# However, we can't express that in the stub for `sum()`
-# without creating many false-positive errors (see #7578).
-# Instead, we special-case the most common examples of this: bool and literal integers.
-@overload
-def sum(iterable: Iterable[bool | _LiteralInteger], /, start: int = 0) -> int: ...
-@overload
-def sum(iterable: Iterable[_SupportsSumNoDefaultT], /) -> _SupportsSumNoDefaultT | Literal[0]: ...
-@overload
-def sum(iterable: Iterable[_AddableT1], /, start: _AddableT2) -> _AddableT1 | _AddableT2: ...
+    for key, variants in label_map.items():
+        found = None
+        for label in variants:
+            # look for 'label: value' or 'label value' patterns
+            # allow optional whitespace and up to end-of-line
+            pattern = rf"{re.escape(label)}[:\s]+(.+)$"
+            m = re.search(pattern, full_text, flags=re.IGNORECASE | re.MULTILINE)
+            if m:
+                val = m.group(1).strip()
+                # trim trailing punctuation
+                val = val.rstrip(";.,")
+                found = val
+                break
+        if found:
+            parsed[key] = found
 
-# The argument to `vars()` has to have a `__dict__` attribute, so the second overload can't be annotated with `object`
-# (A "SupportsDunderDict" protocol doesn't work)
-@overload
-def vars(object: type, /) -> types.MappingProxyType[str, Any]: ...
-@overload
-def vars(object: Any = ..., /) -> dict[str, Any]: ...
-@disjoint_base
-class zip(Generic[_T_co]):
-    if sys.version_info >= (3, 10):
-        @overload
-        def __new__(cls, *, strict: bool = False) -> zip[Any]: ...
-        @overload
-        def __new__(cls, iter1: Iterable[_T1], /, *, strict: bool = False) -> zip[tuple[_T1]]: ...
-        @overload
-        def __new__(cls, iter1: Iterable[_T1], iter2: Iterable[_T2], /, *, strict: bool = False) -> zip[tuple[_T1, _T2]]: ...
-        @overload
-        def __new__(
-            cls, iter1: Iterable[_T1], iter2: Iterable[_T2], iter3: Iterable[_T3], /, *, strict: bool = False
-        ) -> zip[tuple[_T1, _T2, _T3]]: ...
-        @overload
-        def __new__(
-            cls,
-            iter1: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            /,
-            *,
-            strict: bool = False,
-        ) -> zip[tuple[_T1, _T2, _T3, _T4]]: ...
-        @overload
-        def __new__(
-            cls,
-            iter1: Iterable[_T1],
-            iter2: Iterable[_T2],
-            iter3: Iterable[_T3],
-            iter4: Iterable[_T4],
-            iter5: Iterable[_T5],
-            /,
-            *,
-            strict: bool = False,
-        ) -> zip[tuple[_T1, _T2, _T3, _T4, _T5]]: ...
-        @overload
-        def __new__(
-            cls,
-            iter1: Iterable[Any],
-            iter2: Iterable[Any],
-            iter3: Iterable[Any],
-            iter4: Iterable[Any],
-            iter5: Iterable[Any],
-            iter6: Iterable[Any],
-            /,
-            *iterables: Iterable[Any],
-            strict: bool = False,
-        ) -> zip[tuple[Any, ...]]: ...
+    # Try to extract simple lat/lon if present as decimal pairs e.g. -27.47,153.02
+    if "gps_lat" not in parsed or "gps_lon" not in parsed:
+        m = re.search(r"([+-]?\d+\.\d+)\s*[,:\s]\s*([+-]?\d+\.\d+)", full_text)
+        if m:
+            parsed.setdefault("gps_lat", m.group(1))
+            parsed.setdefault("gps_lon", m.group(2))
+
+    return parsed
+
+st.markdown(
+    f"""
+<style>
+html, body, [data-testid="stAppViewContainer"], .stApp {{
+    background-color: {EDS_LIGHT_BG} !important;
+    color: #111827 !important;
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+.block-container {{
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+div[data-testid="stForm"] {{
+    background-color: {EDS_CARD_BG};
+    padding: 1.5rem 1.75rem;
+    border-radius: 8px;
+    border: 1px solid {EDS_BORDER};
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+h1, h2, h3, h4, h5, h6 {{
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+p, span, div {{
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+h1, h2, h3 {{
+    color: {EDS_PRIMARY};
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+label, [data-testid="stWidgetLabel"] p {{
+    color: #111827 !important;
+    font-weight: 500;
+    font-size: 0.9rem;
+    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+}}
+
+input, textarea, select {{
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-radius: 4px !important;
+    border: 1px solid #d1d5db !important;
+}}
+
+input::placeholder, textarea::placeholder {{
+    color: #9ca3af !important;
+}}
+
+[data-baseweb="input"] input,
+[data-baseweb="input"] textarea {{
+    background-color: #f3f4f6 !important;
+    color: #00507A !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    padding: 0.6rem 0.75rem !important;
+    font-weight: 600 !important;
+}}
+
+[data-baseweb="input"] input::placeholder,
+[data-baseweb="input"] textarea::placeholder {{
+    color: #9ca3af !important;
+}}
+
+[data-baseweb="textarea"] textarea {{
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 4px !important;
+}}
+
+[data-baseweb="textarea"] textarea::placeholder {{
+    color: #9ca3af !important;
+}}
+
+[data-baseweb="select"] [role="button"],
+[data-baseweb="select"] div {{
+    background-color: #f3f4f6 !important;
+    color: #00507A !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    font-weight: 600 !important;
+}}
+
+[data-testid="stSelectbox"] {{
+    width: 100% !important;
+}}
+
+[data-testid="stSelectbox"] div[role="combobox"] {{
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+    border-radius: 4px !important;
+    border: 2px solid #00507A !important;
+    padding: 0.75rem 0.75rem !important;
+    font-weight: 600 !important;
+    min-height: 2.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}}
+
+[data-testid="stSelectbox"] div[role="combobox"] span {{
+    color: #00507A !important;
+    font-weight: 700 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    font-size: 0.95rem !important;
+}}
+
+[data-testid="stSelectbox"] div[role="combobox"] svg {{
+    color: #00507A !important;
+    fill: #00507A !important;
+    stroke: #00507A !important;
+    stroke-width: 2px !important;
+    flex-shrink: 0 !important;
+    margin-left: 0.5rem !important;
+}}
+
+/* Dropdown menu container when opened */
+[data-baseweb="select"] [role="listbox"],
+[data-baseweb="select"] ul,
+div[role="listbox"] {{
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    box-shadow: 0 8px 16px rgba(0, 80, 122, 0.25) !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    z-index: 9999 !important;
+}}
+
+/* Individual dropdown options */
+[data-baseweb="select"] [role="option"],
+[data-baseweb="select"] li,
+div[role="listbox"] div,
+[role="option"] {{
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    padding: 0.875rem 1rem !important;
+    font-weight: 500 !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    cursor: pointer !important;
+    min-height: 2rem !important;
+    display: flex !important;
+    align-items: center !important;
+}}
+
+[data-baseweb="select"] [role="option"]:last-child,
+[data-baseweb="select"] li:last-child,
+div[role="option"]:last-child {{
+    border-bottom: none !important;
+}}
+
+[data-baseweb="select"] [role="option"]:hover,
+[data-baseweb="select"] li:hover,
+div[role="option"]:hover {{
+    background-color: #c7e3f0 !important;
+    color: #00507A !important;
+    font-weight: 700 !important;
+}}
+
+[data-baseweb="select"] [role="option"][aria-selected="true"],
+[data-baseweb="select"] li[aria-selected="true"],
+div[role="option"][aria-selected="true"] {{
+    background-color: #00507A !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}}
+
+/* Streamlit selectbox dropdown styling */
+[data-testid="stSelectbox"] ul {{
+    background-color: #ffffff !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    box-shadow: 0 8px 16px rgba(0, 80, 122, 0.25) !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
+}}
+
+[data-testid="stSelectbox"] li {{
+    color: #111827 !important;
+    background-color: #ffffff !important;
+    padding: 0.875rem 1rem !important;
+    font-weight: 500 !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    cursor: pointer !important;
+    min-height: 2rem !important;
+    display: flex !important;
+    align-items: center !important;
+    font-size: 0.95rem !important;
+}}
+
+[data-testid="stSelectbox"] li:last-child {{
+    border-bottom: none !important;
+}}
+
+[data-testid="stSelectbox"] li:hover {{
+    background-color: #c7e3f0 !important;
+    color: #00507A !important;
+    font-weight: 700 !important;
+}}
+
+[data-testid="stSelectbox"] li[data-selected="true"] {{
+    background-color: #00507A !important; /* EDS primary blue */
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border-left: 4px solid #00507A !important;
+    padding-left: calc(1rem - 4px) !important;
+}}
+
+[data-testid="stExpander"] {{
+    background-color: #ffffff !important;
+}}
+
+[data-testid="stExpander"] > div {{
+    border-radius: 4px !important;
+    border: 1px solid #e5e7eb !important;
+    background-color: #ffffff !important;
+    overflow: visible !important;
+}}
+
+[data-testid="stExpander"] summary {{
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    padding: 0.75rem 1rem !important;
+    margin: 0 !important;
+    color: #111827 !important;
+    font-weight: 700 !important;
+    background: transparent !important;
+    z-index: 3 !important;
+    line-height: 1.5 !important;
+    min-height: 2.5rem !important;
+    overflow: hidden !important;
+    gap: 0.5rem !important;
+}}
+
+/* Hide keyboard_arrow_right text label by making text transparent and using absolute positioning */
+[data-testid="stExpander"] summary span {{
+    position: relative !important;
+    font-size: 0 !important;
+    height: 0 !important;
+    display: none !important;
+    visibility: hidden !important;
+}}
+
+[data-testid="stExpander"] p {{
+    color: #111827 !important;
+}}
+
+[data-testid="stExpander"] svg {{
+    color: #111827 !important;
+    fill: #111827 !important;
+    display: inline-block !important;
+}}
+
+.stButton>button {{
+    background-color: {EDS_PRIMARY} !important;
+    color: #ffffff !important;
+    border-radius: 4px !important;
+    border: none !important;
+    padding: 0.5rem 1.2rem !important;
+    font-weight: 600 !important;
+}}
+
+.stButton>button, button, [data-testid="stDownloadButton"]>button, button[data-testid="stDownloadButton"], a.st-download-link, a[data-testid="stDownloadButton"] {{
+    background-color: {EDS_PRIMARY} !important;
+    color: #ffffff !important;
+    border-radius: 6px !important;
+    border: none !important;
+    padding: 0.45rem 1.0rem !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+}}
+
+.stButton>button:hover, [data-testid="stDownloadButton"]>button:hover, button:hover, a.st-download-link:hover, a[data-testid="stDownloadButton"]:hover {{
+    background-color: {EDS_SECONDARY} !important;
+    color: #ffffff !important;
+}}
+
+.stButton>button:focus, [data-testid="stDownloadButton"]>button:focus, button:focus {{
+    outline: 2px solid rgba(0,80,122,0.18) !important;
+}}
+
+.stButton>button *, [data-testid="stDownloadButton"]>button *, button * {{
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}}
+
+/* Ensure anchor download links show white text on colored background */
+a.st-download-link, a[data-testid="stDownloadButton"] {{
+    color: #ffffff !important;
+}}
+
+/* Form submit button explicit rules */
+[data-testid="stFormSubmitButton"] button, [data-testid="stFormSubmitButton"] {{
+    background-color: {EDS_PRIMARY} !important;
+    color: #ffffff !important;
+    border: 1px solid {EDS_PRIMARY} !important;
+    border-radius: 6px !important;
+    padding: 0.5rem 1.0rem !important;
+    font-weight: 700 !important;
+}}
+
+[data-testid="stFormSubmitButton"] button:hover, [data-testid="stFormSubmitButton"]:hover > button {{
+    background-color: {EDS_SECONDARY} !important;
+    color: #ffffff !important;
+}}
+    background-color: {EDS_SECONDARY} !important;
+    color: #ffffff !important;
+    border-radius: 4px !important;
+    border: none !important;
+    padding: 0.5rem 1.2rem !important;
+    font-weight: 600 !important;
+}}
+
+[data-testid="stDownloadButton"]>button:hover {{
+    background-color: {EDS_PRIMARY} !important;
+}}
+
+[data-testid="stDownloadButton"]>button * {{
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}}
+
+[data-testid="stAlert"] {{
+    border-radius: 4px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    color: #111827 !important;
+}}
+
+[data-testid="stAlert"] p {{
+    color: #111827 !important;
+}}
+
+/* Strong focus highlight for tabbing between fields */
+input:focus,
+textarea:focus,
+select:focus,
+button:focus,
+[data-baseweb="input"] input:focus,
+[data-baseweb="textarea"] textarea:focus,
+[data-baseweb="select"] [role="combobox"]:focus {{
+    outline: none !important;
+    border-color: #2563eb !important;  /* Strong blue border */
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    background-color: #ffffff !important;
+}}
+
+/* Streamlit selectbox container when focused */
+[data-testid="stSelectbox"] div[role="combobox"]:focus-within {{
+    outline: none !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+    background-color: #ffffff !important;
+}}
+
+/* Date & time & number inputs focus */
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="number"]:focus {{
+    outline: none !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+}}
+
+/* Improve visibility of time, date, and number inputs */
+input[type="time"],
+input[type="date"],
+input[type="number"] {{
+    background-color: #f3f4f6 !important;
+    color: #00507A !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    padding: 0.6rem 0.75rem !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+}}
+
+/* File uploader focus */
+[data-testid="stFileUploader"] section:focus-within {{
+    outline: none !important;
+    border: 1px solid #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+}}
+
+/* Expander header and content contrast - readable text when expanded */
+[data-testid="stExpander"] {{
+    background-color: #ffffff !important;
+}}
+
+[data-testid="stExpander"] > div {{
+    background-color: #ffffff !important;
+}}
+
+[data-testid="stExpander"] summary {{
+    color: #111827 !important;
+}}
+
+[data-testid="stExpander"] p, [data-testid="stExpander"] label {{
+    color: #111827 !important;
+}}
+
+[data-testid="stExpander"] [role="button"] {{
+    color: #111827 !important;
+}}
+
+/* AGGRESSIVE DROPDOWN STYLING - Force display of selected values */
+div[data-testid="stSelectbox"] {{
+    width: 100% !important;
+}}
+
+div[data-testid="stSelectbox"] > div {{
+    width: 100% !important;
+}}
+
+div[data-testid="stSelectbox"] div[role="combobox"],
+div[data-testid="stSelectbox"] div[data-baseweb="select"] div[role="combobox"] {{
+    background-color: #f3f4f6 !important;
+    color: #00507A !important;
+    border: 2px solid #00507A !important;
+    border-radius: 4px !important;
+    padding: 0.75rem !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    min-height: 2.8rem !important;
+}}
+
+div[data-testid="stSelectbox"] div[role="combobox"] span,
+div[data-testid="stSelectbox"] div[role="combobox"] > span {{
+    color: #00507A !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+}}
+
+div[data-testid="stSelectbox"] ul li {{
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    padding: 0.875rem 1rem !important;
+    min-height: 2.2rem !important;
+    font-weight: 500 !important;
+    font-size: 0.95rem !important;
+}}
+
+div[data-testid="stSelectbox"] ul li:hover {{
+    background-color: #c7e3f0 !important;
+    color: #00507A !important;
+    font-weight: 700 !important;
+}}
+
+div[data-testid="stSelectbox"] ul li[data-selected="true"] {{
+    background-color: #00507A !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+st.title("EDS Sewer Flow Meter Installation Report")
+st.caption(
+    "Standardised EDS installation reports for sewer flow modelling and inflow/infiltration studies."
+)
+
+# ---------- Session state ----------
+if "sites" not in st.session_state:
+    st.session_state["sites"] = []
+if "draft_site" not in st.session_state:
+    st.session_state["draft_site"] = None
+if "edit_index" not in st.session_state:
+    st.session_state["edit_index"] = None
+if "gps_lat" not in st.session_state:
+    st.session_state["gps_lat"] = ""
+if "gps_lon" not in st.session_state:
+    st.session_state["gps_lon"] = ""
+if "gps_last_clicked" not in st.session_state:
+    st.session_state["gps_last_clicked"] = None
+if "device_gps_raw" not in st.session_state:
+    st.session_state["device_gps_raw"] = None
+if "auto_address" not in st.session_state:
+    st.session_state["auto_address"] = ""
+if "last_geocoded_coords" not in st.session_state:
+    st.session_state["last_geocoded_coords"] = None
+
+sites = st.session_state["sites"]
+draft = st.session_state["draft_site"] or {}
+edit_index = st.session_state["edit_index"]
+
+# ---------- Map / GPS helper UI ----------
+st.header("Add / Record a Site")
+
+st.markdown(
+    "Pan/zoom to your manhole location, click the map, then use "
+    "**Use last map click** to push it into the GPS fields. "
+    "If available, **Use device GPS** will read your browser location."
+)
+
+if st.session_state["gps_lat"] and st.session_state["gps_lon"]:
+    center = [float(st.session_state["gps_lat"]), float(st.session_state["gps_lon"])]
+else:
+    center = [-27.4698, 153.0251]  # Brisbane default
+
+# Zoom in more on the interactive map
+m = folium.Map(location=center, zoom_start=19, control_scale=True)
+
+if st.session_state["gps_last_clicked"]:
+    lat, lon = st.session_state["gps_last_clicked"]
+    folium.Marker([lat, lon], tooltip="Last clicked location").add_to(m)
+
+map_result = st_folium(m, height=360, width=None, key="site_map")
+
+if map_result and map_result.get("last_clicked"):
+    lat = map_result["last_clicked"]["lat"]
+    lon = map_result["last_clicked"]["lng"]
+    st.session_state["gps_last_clicked"] = (lat, lon)
+    # Immediately update session state so GPS fields reflect map click and trigger address lookup
+    st.session_state["gps_lat"] = f"{lat:.6f}"
+    st.session_state["gps_lon"] = f"{lon:.6f}"
+
+# GPS action buttons (below the map, not in expander)
+col_map_btn1, col_map_btn2 = st.columns([1, 1])
+with col_map_btn1:
+    if st.button("📍 Use last map click"):
+        if st.session_state["gps_last_clicked"]:
+            lat, lon = st.session_state["gps_last_clicked"]
+            st.session_state["gps_lat"] = f"{lat:.6f}"
+            st.session_state["gps_lon"] = f"{lon:.6f}"
+        else:
+            st.warning("Click on the map first to set a location.")
+with col_map_btn2:
+    if GEO_AVAILABLE:
+        if st.button("📡 Use device GPS"):
+            loc = get_geolocation()
+            st.session_state["device_gps_raw"] = loc
+
+            if not loc:
+                st.warning(
+                    "Device GPS not available or no response yet. "
+                    "This is usually due to the browser blocking location access. "
+                    "You can still use the map click to set coordinates."
+                )
+            else:
+                err = loc.get("error")
+                if err:
+                    st.warning(
+                        f"Device GPS error from browser: **{err}**. "
+                        "This is controlled by your browser/OS (e.g. blocked on "
+                        "non-secure origins or site-level permissions). "
+                        "Use the map click instead, or open the app via "
+                        "`http://localhost:8501` with Location allowed."
+                    )
+                else:
+                    coords = loc.get("coords", {})
+                    lat = coords.get("latitude") or loc.get("lat")
+                    lon = coords.get("longitude") or loc.get("lon")
+                    if lat is not None and lon is not None:
+                        try:
+                            st.session_state["gps_lat"] = f"{float(lat):.6f}"
+                            st.session_state["gps_lon"] = f"{float(lon):.6f}"
+                            st.success("Device GPS position recorded.")
+                        except Exception:
+                            st.warning(
+                                "Received GPS data but couldn't parse it. "
+                                "Please use the map click instead."
+                            )
+                    else:
+                        st.warning(
+                            "Device GPS did not return coordinates. "
+                            "This can happen if the browser only allows "
+                            "approximate or blocked location. "
+                            "Please use the map click to set an accurate point."
+                        )
     else:
-        @overload
-        def __new__(cls) -> zip[Any]: ...
-        @overload
-        def __new__(cls, iter1: Iterable[_T1], /) -> zip[tuple[_T1]]: ...
-        @overload
-        def __new__(cls, iter1: Iterable[_T1], iter2: Iterable[_T2], /) -> zip[tuple[_T1, _T2]]: ...
-        @overload
-        def __new__(cls, iter1: Iterable[_T1], iter2: Iterable[_T2], iter3: Iterable[_T3], /) -> zip[tuple[_T1, _T2, _T3]]: ...
-        @overload
-        def __new__(
-            cls, iter1: Iterable[_T1], iter2: Iterable[_T2], iter3: Iterable[_T3], iter4: Iterable[_T4], /
-        ) -> zip[tuple[_T1, _T2, _T3, _T4]]: ...
-        @overload
-        def __new__(
-            cls, iter1: Iterable[_T1], iter2: Iterable[_T2], iter3: Iterable[_T3], iter4: Iterable[_T4], iter5: Iterable[_T5], /
-        ) -> zip[tuple[_T1, _T2, _T3, _T4, _T5]]: ...
-        @overload
-        def __new__(
-            cls,
-            iter1: Iterable[Any],
-            iter2: Iterable[Any],
-            iter3: Iterable[Any],
-            iter4: Iterable[Any],
-            iter5: Iterable[Any],
-            iter6: Iterable[Any],
-            /,
-            *iterables: Iterable[Any],
-        ) -> zip[tuple[Any, ...]]: ...
+        st.caption(
+            "Device GPS is not available (install `streamlit-js-eval` to enable it)."
+        )
 
-    def __iter__(self) -> Self: ...
-    def __next__(self) -> _T_co: ...
+if GEO_AVAILABLE and st.session_state["device_gps_raw"]:
+    st.caption(
+        f"Last device GPS raw response: {st.session_state['device_gps_raw']}"
+    )
 
-# Signature of `builtins.__import__` should be kept identical to `importlib.__import__`
-# Return type of `__import__` should be kept the same as return type of `importlib.import_module`
-def __import__(
-    name: str,
-    globals: Mapping[str, object] | None = None,
-    locals: Mapping[str, object] | None = None,
-    fromlist: Sequence[str] | None = (),
-    level: int = 0,
-) -> types.ModuleType: ...
-def __build_class__(func: Callable[[], CellType | Any], name: str, /, *bases: Any, metaclass: Any = ..., **kwds: Any) -> Any: ...
+# Optional: upload an existing PDF report (generated by this app) to pre-fill the form
+with st.expander("Upload completed PDF report to pre-fill form (optional)", expanded=False):
+    pdf_file = st.file_uploader(
+        "Upload a previously-completed PDF report to pre-populate the form",
+        type=["pdf"],
+        help="This attempts to parse PDF text and map common fields back into the form."
+    )
+    if pdf_file is not None:
+        blob = pdf_file.read()
+        parsed = parse_pdf_report(blob)
+        if not parsed:
+            st.error("Couldn't extract any text from the uploaded PDF.")
+        elif parsed.get("_error") == "missing_pyPDF2":
+            st.warning(
+                "PyPDF2 is required to parse PDFs. Install it with `pip install PyPDF2` "
+                "and restart the app to enable PDF pre-fill."
+            )
+        elif parsed.get("_error") == "parse_failed":
+            st.error("Failed to parse the uploaded PDF. It may be corrupted or scanned as images.")
+        else:
+            # Merge parsed fields into a draft and trigger a rerun to update form inputs
+            draft_vals = st.session_state.get("draft_site") or {}
+            # Don't overwrite non-empty values unless parsed provides them
+            for k, v in parsed.items():
+                if k.startswith("_"):
+                    continue
+                if v and (not draft_vals.get(k)):
+                    draft_vals[k] = v
+            st.session_state["draft_site"] = draft_vals
+            st.success("PDF parsed — form pre-populated. You can edit and save this draft.")
+            safe_rerun()
 
-if sys.version_info >= (3, 10):
-    from types import EllipsisType
+# Pull any stored GPS into the draft (always update from session state if available)
+if st.session_state["gps_lat"]:
+    draft["gps_lat"] = st.session_state["gps_lat"]
+if st.session_state["gps_lon"]:
+    draft["gps_lon"] = st.session_state["gps_lon"]
 
-    # Backwards compatibility hack for folks who relied on the ellipsis type
-    # existing in typeshed in Python 3.9 and earlier.
-    ellipsis = EllipsisType
+# ---------- Site form ----------
+with st.form("site_form", clear_on_submit=False):
+    # Editing banner
+    if edit_index is not None and 0 <= edit_index < len(sites):
+        st.info(
+            f"Editing site **{sites[edit_index].get('site_name', '')}** "
+            f"in project **{sites[edit_index].get('project_name', '')}**. "
+            "Update fields and click **Update site in current project**."
+        )
 
-    Ellipsis: EllipsisType
+    st.subheader("Project")
 
+    c1, c2, c3 = st.columns([1.2, 1.2, 0.8])
+    with c1:
+        project_name = st.text_input(
+            "Project name",
+            value=draft.get("project_name", ""),
+        )
+        client = st.text_input("Client", value=draft.get("client", ""))
+        catchment = st.text_input("Catchment / area", value=draft.get("catchment", ""))
+    with c2:
+        site_name = st.text_input("Site / manhole name", value=draft.get("site_name", ""))
+        site_id = st.text_input("Site ID", value=draft.get("site_id", ""))
+        client_asset_id = st.text_input(
+            "Client asset ID", value=draft.get("client_asset_id", "")
+        )
+    with c3:
+        gis_id = st.text_input("GIS ID", value=draft.get("gis_id", ""))
+
+        install_date_default = draft.get("install_date")
+        if isinstance(install_date_default, str):
+            try:
+                install_date_default = date.fromisoformat(install_date_default)
+            except ValueError:
+                install_date_default = date.today()
+        elif isinstance(install_date_default, date):
+            pass
+        else:
+            install_date_default = date.today()
+
+        install_date = st.date_input(
+            "Install date",
+            value=install_date_default,
+        )
+
+        install_time_default = draft.get("install_time")
+        if isinstance(install_time_default, str):
+            try:
+                h, m = map(int, install_time_default.split(":"))
+                install_time_default = time(h, m)
+            except Exception:
+                install_time_default = time(9, 0)
+        elif isinstance(install_time_default, time):
+            pass
+        else:
+            install_time_default = time(9, 0)
+
+        install_time = st.time_input(
+            "Install time",
+            value=install_time_default,
+        )
+
+    st.markdown("---")
+
+    st.subheader("Location, Access & Safety")
+
+    c_gps1, c_gps2, c_gps3 = st.columns([1, 1, 2])
+    with c_gps1:
+        gps_lat = st.text_input("GPS latitude", value=st.session_state["gps_lat"])
+    with c_gps2:
+        gps_lon = st.text_input("GPS longitude", value=st.session_state["gps_lon"])
+    with c_gps3:
+        manhole_location_desc = st.text_area(
+            "Location description (nearby road, property & landmarks)",
+            value=draft.get("manhole_location_desc", ""),
+        )
+    
+    # Auto-populate address from GPS coordinates (from map click OR manual entry)
+    # Check both session state (from map) and form input values (from manual entry)
+    current_gps_lat = gps_lat if gps_lat else st.session_state.get("gps_lat", "")
+    current_gps_lon = gps_lon if gps_lon else st.session_state.get("gps_lon", "")
+    current_coords = (current_gps_lat, current_gps_lon) if current_gps_lat and current_gps_lon else None
+    
+    # Trigger reverse geocoding when coordinates change (from map or manual entry)
+    if current_coords and current_coords != st.session_state.get("last_geocoded_coords"):
+        try:
+            lat_float = float(current_gps_lat)
+            lon_float = float(current_gps_lon)
+            addr = get_address_from_coords(lat_float, lon_float)
+            if addr:
+                st.session_state["auto_address"] = addr
+                st.session_state["last_geocoded_coords"] = current_coords
+        except (ValueError, Exception):
+            # If coords are invalid, clear the cached coords so it tries again when valid ones are entered
+            st.session_state["last_geocoded_coords"] = None
+    
+    # Site address field (auto-populated from GPS, but editable)
+    site_address = st.text_input(
+        "Site address",
+        value=draft.get("site_address", "") or st.session_state.get("auto_address", ""),
+        help="This will be included in the PDF report for reference.",
+    )
+
+    c_acc1, c_acc2, c_acc3 = st.columns([1, 1, 2])
+    with c_acc1:
+        access_options = ["", "On-road", "Off-road", "Easement", "Private property"]
+        access_val = draft.get("access_type", "")
+        access_index = access_options.index(access_val) if access_val in access_options else 0
+        access_type = st.selectbox(
+            "Access type",
+            access_options,
+            index=access_index,
+        )
+    with c_acc2:
+        confined_space_required = st.checkbox(
+            "Confined space entry required",
+            value=draft.get("confined_space_required", False),
+        )
+        traffic_control_required = st.checkbox(
+            "Traffic control required",
+            value=draft.get("traffic_control_required", False),
+        )
+    with c_acc3:
+        access_safety_constraints = st.text_area(
+            "Safety constraints / access notes",
+            value=draft.get("access_safety_constraints", ""),
+        )
+
+    other_permits_required = st.text_input(
+        "Other permits / approvals (if any)",
+        value=draft.get("other_permits_required", ""),
+    )
+
+    st.markdown("---")
+
+    st.subheader("Pipe & Hydraulics")
+
+    ph1, ph2, ph3, ph4 = st.columns([1, 1, 1, 1])
+    with ph1:
+        pipe_diameter_mm = st.number_input(
+            "Pipe diameter (mm)", min_value=0, value=int(draft.get("pipe_diameter_mm", 0))
+        )
+        depth_to_invert_mm = st.number_input(
+            "Depth to invert (mm)",
+            min_value=0,
+            value=int(draft.get("depth_to_invert_mm", 0)),
+        )
+    with ph2:
+        pipe_material_opts = ["", "VC", "RC", "PVC", "DICL", "Steel", "HDPE", "Other"]
+        pm_val = draft.get("pipe_material", "")
+        pm_index = (
+            pipe_material_opts.index(pm_val)
+            if pm_val in pipe_material_opts
+            else (len(pipe_material_opts) - 1 if pm_val else 0)
+        )
+        pipe_material_choice = st.selectbox(
+            "Pipe material",
+            pipe_material_opts,
+            index=pm_index,
+        )
+        if pipe_material_choice == "Other":
+            pipe_material = st.text_input(
+                "Other pipe material",
+                value=pm_val if pm_val not in pipe_material_opts else "",
+            )
+        else:
+            pipe_material = pipe_material_choice
+
+        depth_to_soffit_mm = st.number_input(
+            "Depth to soffit (mm)",
+            min_value=0,
+            value=int(draft.get("depth_to_soffit_mm", 0)),
+        )
+    with ph3:
+        pipe_shape_opts = ["", "Circular", "Egg", "Box", "Oval", "Arch", "Other"]
+        ps_val = draft.get("pipe_shape", "")
+        ps_index = (
+            pipe_shape_opts.index(ps_val)
+            if ps_val in pipe_shape_opts
+            else (len(pipe_shape_opts) - 1 if ps_val else 0)
+        )
+        pipe_shape_choice = st.selectbox(
+            "Pipe shape",
+            pipe_shape_opts,
+            index=ps_index,
+        )
+        if pipe_shape_choice == "Other":
+            pipe_shape = st.text_input(
+                "Other pipe shape",
+                value=ps_val if ps_val not in pipe_shape_opts else "",
+            )
+        else:
+            pipe_shape = pipe_shape_choice
+    with ph4:
+        hydro_turbulence_options = ["", "Low", "Moderate", "High"]
+        ht_val = draft.get("hydro_turbulence_level", "")
+        ht_index = (
+            hydro_turbulence_options.index(ht_val)
+            if ht_val in hydro_turbulence_options
+            else 0
+        )
+        hydro_turbulence_level = st.selectbox(
+            "Turbulence level at sensor",
+            hydro_turbulence_options,
+            index=ht_index,
+        )
+
+    uh1, uh2 = st.columns(2)
+    with uh1:
+        upstream_config = st.text_area(
+            "Upstream configuration (drops, bends, junctions, distance)",
+            value=draft.get("upstream_config", ""),
+        )
+    with uh2:
+        downstream_config = st.text_area(
+            "Downstream configuration (drops, bends, junctions, distance)",
+            value=draft.get("downstream_config", ""),
+        )
+
+    hh1, hh2, hh3 = st.columns(3)
+    with hh1:
+        hydro_drops = st.checkbox(
+            "Drops close to meter (≤2D)",
+            value=draft.get("hydro_drops", False),
+        )
+        hydro_bends = st.checkbox(
+            "Bends close to meter (≤5D)",
+            value=draft.get("hydro_bends", False),
+        )
+    with hh2:
+        hydro_junctions = st.checkbox(
+            "Junctions within 5D",
+            value=draft.get("hydro_junctions", False),
+        )
+        hydro_surcharge_risk = st.checkbox(
+            "History of surcharge at site",
+            value=draft.get("hydro_surcharge_risk", False),
+        )
+    with hh3:
+        hydro_backwater_risk = st.checkbox(
+            "Backwater effects likely",
+            value=draft.get("hydro_backwater_risk", False),
+        )
+        hydraulic_notes = st.text_area(
+            "Hydraulic comments (e.g. risk to data quality)",
+            value=draft.get("hydraulic_notes", ""),
+        )
+
+    st.markdown("---")
+
+    st.subheader("Meter, Sensor & Configuration")
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        meter_model_opts = [
+            "",
+            "Detectronic MSFM AV",
+            "Detectronic MSFM4",
+            "LIDoTT AV",
+            "Other",
+        ]
+        mm_val = draft.get("meter_model", "")
+        mm_index = (
+            meter_model_opts.index(mm_val)
+            if mm_val in meter_model_opts
+            else (len(meter_model_opts) - 1 if mm_val else 1)
+        )
+        meter_model_choice = st.selectbox(
+            "Meter model",
+            meter_model_opts,
+            index=mm_index,
+        )
+        if meter_model_choice == "Other":
+            meter_model = st.text_input(
+                "Other meter model",
+                value=mm_val if mm_val not in meter_model_opts else "",
+            )
+        else:
+            meter_model = meter_model_choice
+
+        logger_serial = st.text_input(
+            "Logger serial number", value=draft.get("logger_serial", "")
+        )
+    with m2:
+        sensor_serial = st.text_input(
+            "Sensor serial number", value=draft.get("sensor_serial", "")
+        )
+        sensor_distance_from_manhole_m = st.number_input(
+            "Sensor distance from manhole (m)",
+            min_value=0.0,
+            value=float(draft.get("sensor_distance_from_manhole_m", 0.0)),
+        )
+    with m3:
+        sensor_orientation = st.text_input(
+            "Sensor orientation (e.g. upstream, downstream)",
+            value=draft.get("sensor_orientation", ""),
+        )
+        sensor_mount_type = st.text_input(
+            "Sensor mount type (e.g. band, bolt-on)",
+            value=draft.get("sensor_mount_type", ""),
+        )
+
+    datum_reference_desc = st.text_input(
+        "Datum reference (e.g. top of lid, local benchmark)",
+        value=draft.get("datum_reference_desc", ""),
+    )
+
+    r1, r2, r3, r4 = st.columns(4)
+    with r1:
+        level_range_min_mm = st.number_input(
+            "Level range min (mm)",
+            min_value=0,
+            value=int(draft.get("level_range_min_mm", 0)),
+        )
+    with r2:
+        level_range_max_mm = st.number_input(
+            "Level range max (mm)",
+            min_value=0,
+            value=int(draft.get("level_range_max_mm", 0)),
+        )
+    with r3:
+        velocity_range_min_ms = st.number_input(
+            "Velocity range min (m/s)",
+            min_value=0.0,
+            value=float(draft.get("velocity_range_min_ms", 0.0)),
+        )
+    with r4:
+        velocity_range_max_ms = st.number_input(
+            "Velocity range max (m/s)",
+            min_value=0.0,
+            value=float(draft.get("velocity_range_max_ms", 3.0)),
+        )
+
+    output_scaling_desc = st.text_input(
+        "Output scaling (e.g. 4–20 mA = 0–50 L/s)",
+        value=draft.get("output_scaling_desc", ""),
+    )
+
+    cfg1, cfg2, cfg3 = st.columns(3)
+    with cfg1:
+        logging_interval_min = st.number_input(
+            "Logging interval (minutes)",
+            min_value=1,
+            value=int(draft.get("logging_interval_min", 5)),
+        )
+    with cfg2:
+        tz_options = ["", "AEST", "AEDT", "ACST", "AWST", "UTC"]
+        tz_val = draft.get("timezone", "AEST")
+        tz_index = tz_options.index(tz_val) if tz_val in tz_options else 1
+        timezone = st.selectbox("Time zone", tz_options, index=tz_index)
+    with cfg3:
+        comms_method_opts = [
+            "",
+            "SIM – Telstra",
+            "SIM – Optus",
+            "SIM – Vodafone",
+            "Ethernet",
+            "LoRaWAN",
+            "Modbus",
+            "Other",
+        ]
+        cm_val = draft.get("comms_method", "")
+        cm_index = (
+            comms_method_opts.index(cm_val)
+            if cm_val in comms_method_opts
+            else (len(comms_method_opts) - 1 if cm_val else 0)
+        )
+        comms_method_choice = st.selectbox(
+            "Comms method",
+            comms_method_opts,
+            index=cm_index,
+        )
+        if comms_method_choice == "Other":
+            comms_method = st.text_input(
+                "Other comms method",
+                value=cm_val if cm_val not in comms_method_opts else "",
+            )
+        else:
+            comms_method = comms_method_choice
+
+    t1, t2 = st.columns(2)
+    with t1:
+        telemetry_logger_id = st.text_input(
+            "Telemetry logger ID / RTU tag",
+            value=draft.get("telemetry_logger_id", ""),
+        )
+    with t2:
+        telemetry_server = st.text_input(
+            "Telemetry server / platform",
+            value=draft.get("telemetry_server", ""),
+        )
+
+    telemetry_notes = st.text_area(
+        "Telemetry notes (APN, polling, integration, etc.)",
+        value=draft.get("telemetry_notes", ""),
+    )
+
+    st.markdown("---")
+
+    st.subheader("Commissioning Checks – Primary Reading")
+
+    cc1, cc2, cc3 = st.columns(3)
+    with cc1:
+        depth_check_meas_mm = st.number_input(
+            "Measured depth (mm)",
+            min_value=0,
+            value=int(draft.get("depth_check_meas_mm", 0)),
+        )
+        vel_check_meas_ms = st.number_input(
+            "Measured velocity (m/s)",
+            min_value=0.0,
+            value=float(draft.get("vel_check_meas_ms", 0.0)),
+        )
+    with cc2:
+        depth_check_meter_mm = st.number_input(
+            "Meter depth (mm)",
+            min_value=0,
+            value=int(draft.get("depth_check_meter_mm", 0)),
+        )
+        vel_check_meter_ms = st.number_input(
+            "Meter velocity (m/s)",
+            min_value=0.0,
+            value=float(draft.get("vel_check_meter_ms", 0.0)),
+        )
+    with cc3:
+        depth_check_tolerance_mm = st.number_input(
+            "Depth tolerance (±mm)",
+            min_value=0,
+            value=int(draft.get("depth_check_tolerance_mm", 5)),
+        )
+        depth_check_diff_mm = depth_check_meter_mm - depth_check_meas_mm
+        depth_check_within_tol = (
+            abs(depth_check_diff_mm) <= depth_check_tolerance_mm
+        )
+        st.markdown(
+            f"**Depth diff:** {depth_check_diff_mm} mm – "
+            f"{'within tolerance' if depth_check_within_tol else 'outside tolerance'}"
+        )
+
+    c_com1, c_com2 = st.columns(2)
+    with c_com1:
+        cv_options = ["", "Yes", "No"]
+        cv_val = draft.get("comms_verified", "")
+        cv_index = cv_options.index(cv_val) if cv_val in cv_options else 0
+        comms_verified = st.selectbox(
+            "Comms verified on platform?",
+            cv_options,
+            index=cv_index,
+        )
+    with c_com2:
+        comms_verified_at = st.text_input(
+            "Comms verified at (timestamp)",
+            value=draft.get("comms_verified_at", ""),
+        )
+
+    zero_depth_check_done = st.checkbox(
+        "Zero-depth check performed",
+        value=draft.get("zero_depth_check_done", False),
+    )
+    zero_depth_check_notes = st.text_input(
+        "Zero-depth check notes",
+        value=draft.get("zero_depth_check_notes", ""),
+    )
+
+    rc1, rc2, rc3 = st.columns(3)
+    with rc1:
+        reference_device_type = st.text_input(
+            "Reference device type (if used)",
+            value=draft.get("reference_device_type", ""),
+        )
+    with rc2:
+        reference_device_id = st.text_input(
+            "Reference device ID / tag",
+            value=draft.get("reference_device_id", ""),
+        )
+    with rc3:
+        reference_reading_desc = st.text_input(
+            "Reference comparison (brief)",
+            value=draft.get("reference_reading_desc", ""),
+        )
+
+    st.markdown("---")
+
+    st.subheader("Additional Verification Readings (optional)")
+    extra_readings = draft.get("verification_readings", []) or []
+    extra_count = st.number_input(
+        "Number of additional readings",
+        min_value=0,
+        max_value=10,
+        value=len(extra_readings),
+    )
+
+    updated_extra = []
+    for i in range(extra_count):
+        prev = extra_readings[i] if i < len(extra_readings) else {}
+        st.markdown(f"**Reading {i+1}**")
+        ec1, ec2, ec3, ec4 = st.columns(4)
+        with ec1:
+            d_meas = st.number_input(
+                f"Measured depth (mm) – R{i+1}",
+                min_value=0,
+                value=int(prev.get("depth_meas_mm", 0)),
+                key=f"extra_d_meas_{i}",
+            )
+        with ec2:
+            d_meter = st.number_input(
+                f"Meter depth (mm) – R{i+1}",
+                min_value=0,
+                value=int(prev.get("depth_meter_mm", 0)),
+                key=f"extra_d_meter_{i}",
+            )
+        with ec3:
+            v_meas = st.number_input(
+                f"Measured velocity (m/s) – R{i+1}",
+                min_value=0.0,
+                value=float(prev.get("vel_meas_ms", 0.0)),
+                key=f"extra_v_meas_{i}",
+            )
+        with ec4:
+            v_meter = st.number_input(
+                f"Meter velocity (m/s) – R{i+1}",
+                min_value=0.0,
+                value=float(prev.get("vel_meter_ms", 0.0)),
+                key=f"extra_v_meter_{i}",
+            )
+        comment = st.text_input(
+            f"Notes – R{i+1}",
+            value=prev.get("comment", ""),
+            key=f"extra_comment_{i}",
+        )
+        updated_extra.append(
+            {
+                "depth_meas_mm": d_meas,
+                "depth_meter_mm": d_meter,
+                "vel_meas_ms": v_meas,
+                "vel_meter_ms": v_meter,
+                "comment": comment,
+            }
+        )
+
+    st.markdown("---")
+
+    st.subheader("Calibration Suitability & Modelling Notes")
+
+    cal1, cal2 = st.columns([1, 2])
+    with cal1:
+        rating_options = ["", "Good", "Fair", "Poor"]
+        cr_val = draft.get("calibration_rating", "")
+        cr_index = rating_options.index(cr_val) if cr_val in rating_options else 0
+        calibration_rating = st.selectbox(
+            "Overall rating",
+            rating_options,
+            index=cr_index,
+        )
+    with cal2:
+        calibration_comment = st.text_input(
+            "Calibration suitability comment",
+            value=draft.get(
+                "calibration_comment",
+                "Suitable for 3+ months monitoring for model calibration.",
+            ),
+        )
+
+    modelling_notes = st.text_area(
+        "Modelling notes (how this site should / should not be used)",
+        value=draft.get("modelling_notes", ""),
+    )
+    data_quality_risks = st.text_area(
+        "Known data quality risks or limitations",
+        value=draft.get("data_quality_risks", ""),
+    )
+
+    st.markdown("**Installer checklist**")
+    ch1, ch2, ch3, ch4, ch5 = st.columns(5)
+    with ch1:
+        chk_sensor_in_main_flow = st.checkbox(
+            "Sensor in main flow path",
+            value=draft.get("chk_sensor_in_main_flow", True),
+        )
+    with ch2:
+        chk_no_immediate_drops = st.checkbox(
+            "No immediate drops",
+            value=draft.get("chk_no_immediate_drops", True),
+        )
+    with ch3:
+        chk_depth_range_ok = st.checkbox(
+            "Depth/velocity ranges OK",
+            value=draft.get("chk_depth_range_ok", True),
+        )
+    with ch4:
+        chk_logging_started = st.checkbox(
+            "Logging started",
+            value=draft.get("chk_logging_started", True),
+        )
+    with ch5:
+        chk_comms_checked_platform = st.checkbox(
+            "Comms/data checked",
+            value=draft.get("chk_comms_checked_platform", True),
+        )
+
+    st.markdown("---")
+
+    st.subheader("Diagram & Photos")
+
+    # Manhole / site diagram
+    diag_col1, diag_col2 = st.columns([2, 2])
+    with diag_col1:
+        diagram_file = st.file_uploader(
+            "Upload manhole / site diagram (PNG/JPG)",
+            type=["png", "jpg", "jpeg"],
+        )
+    existing_diagram = draft.get("diagram")
+    default_diag_name = (
+        existing_diagram.get("name", "Manhole / site diagram")
+        if existing_diagram
+        else "Manhole / site diagram"
+    )
+    with diag_col2:
+        diagram_name = st.text_input(
+            "Diagram name / caption",
+            value=default_diag_name,
+        )
+
+    # Site photos
+    photo_files = st.file_uploader(
+        "Upload site photos (manhole, sensor, upstream, downstream, access, etc.)",
+        type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        key="photo_files",
+    )
+
+    st.caption(
+        "You can name each photo below. All uploaded photos will be included in the PDF."
+    )
+
+    new_photos = []
+    for i, f in enumerate(photo_files or []):
+        cap = st.text_input(
+            f"Photo {i+1} name / description",
+            value=f.name,
+            key=f"photo_caption_{f.name}_{i}",
+        )
+        new_photos.append(
+            {
+                "name": cap,
+                "data": f.getvalue(),
+                "mime": f.type,
+            }
+        )
+
+    existing_photos = draft.get("photos", []) or []
+    if existing_photos and not photo_files:
+        st.info(
+            f"{len(existing_photos)} existing photo(s) already stored for this site. "
+            "They will be included in the PDF."
+        )
+    elif existing_photos and photo_files:
+        st.info(
+            f"{len(existing_photos)} existing photo(s) plus "
+            f"{len(new_photos)} new photo(s) will be stored."
+        )
+
+    st.markdown("---")
+
+    st.subheader("Reporting details (Prepared / Reviewed)")
+
+    rep1, rep2, rep3 = st.columns(3)
+    with rep1:
+        prepared_by = st.text_input(
+            "Prepared by",
+            value=draft.get("prepared_by", ""),
+        )
+        prepared_position = st.text_input(
+            "Prepared – position",
+            value=draft.get("prepared_position", ""),
+        )
+
+        prepared_date_default = draft.get("prepared_date")
+        if isinstance(prepared_date_default, str):
+            try:
+                prepared_date_default = date.fromisoformat(prepared_date_default)
+            except ValueError:
+                prepared_date_default = date.today()
+        elif isinstance(prepared_date_default, date):
+            pass
+        else:
+            prepared_date_default = date.today()
+
+        prepared_date = st.date_input(
+            "Prepared – date",
+            value=prepared_date_default,
+        )
+    with rep2:
+        reviewed_by = st.text_input(
+            "Reviewed by",
+            value=draft.get("reviewed_by", ""),
+        )
+        reviewed_position = st.text_input(
+            "Reviewed – position",
+            value=draft.get("reviewed_position", ""),
+        )
+
+        reviewed_date_default = draft.get("reviewed_date")
+        if isinstance(reviewed_date_default, str):
+            try:
+                reviewed_date_default = date.fromisoformat(reviewed_date_default)
+            except ValueError:
+                reviewed_date_default = date.today()
+        elif isinstance(reviewed_date_default, date):
+            pass
+        else:
+            reviewed_date_default = date.today()
+
+        reviewed_date = st.date_input(
+            "Reviewed – date",
+            value=reviewed_date_default,
+        )
+    with rep3:
+        st.write("")
+        st.write("")
+        st.write("Use these fields for internal QA / sign-off.")
+
+    st.markdown("---")
+
+    # Submit button text changes for edit vs new
+    submit_col1, submit_col2 = st.columns([1, 3])
+    with submit_col1:
+        submit_label = (
+            "Update site in current project"
+            if edit_index is not None
+            else "Add site to current project"
+        )
+        submitted = st.form_submit_button(
+            submit_label,
+            use_container_width=True,
+        )
+    with submit_col2:
+        st.caption(
+            "Once submitted, the site will appear below and can be exported "
+            "to Excel or a single-site PDF report."
+        )
+
+    # ---------- Handle form submit ----------
+    if submitted:
+        derived = calculate_average_depth_velocity_and_flow(
+            pipe_diameter_mm,
+            depth_check_meas_mm,
+            depth_check_meter_mm,
+            vel_check_meas_ms,
+            vel_check_meter_ms,
+            updated_extra,
+        )
+
+        if diagram_file is not None:
+            diagram_obj = {
+                "name": diagram_name or diagram_file.name,
+                "data": diagram_file.getvalue(),
+                "mime": diagram_file.type,
+            }
+        else:
+            diagram_obj = existing_diagram
+
+        all_photos = existing_photos + new_photos
+
+        site_record = {
+            "project_name": project_name,
+            "client": client,
+            "catchment": catchment,
+            "site_name": site_name,
+            "site_id": site_id,
+            "client_asset_id": client_asset_id,
+            "gis_id": gis_id,
+            "install_date": str(install_date),
+            "install_time": install_time.strftime("%H:%M"),
+            "gps_lat": gps_lat,
+            "gps_lon": gps_lon,
+            "site_address": site_address,
+            "manhole_location_desc": manhole_location_desc,
+            "access_type": access_type,
+            "confined_space_required": confined_space_required,
+            "traffic_control_required": traffic_control_required,
+            "access_safety_constraints": access_safety_constraints,
+            "other_permits_required": other_permits_required,
+            "pipe_diameter_mm": pipe_diameter_mm,
+            "pipe_material": pipe_material,
+            "pipe_shape": pipe_shape,
+            "depth_to_invert_mm": depth_to_invert_mm,
+            "depth_to_soffit_mm": depth_to_soffit_mm,
+            "hydro_turbulence_level": hydro_turbulence_level,
+            "upstream_config": upstream_config,
+            "downstream_config": downstream_config,
+            "hydro_drops": hydro_drops,
+            "hydro_bends": hydro_bends,
+            "hydro_junctions": hydro_junctions,
+            "hydro_surcharge_risk": hydro_surcharge_risk,
+            "hydro_backwater_risk": hydro_backwater_risk,
+            "hydraulic_notes": hydraulic_notes,
+            "meter_model": meter_model,
+            "logger_serial": logger_serial,
+            "sensor_serial": sensor_serial,
+            "sensor_distance_from_manhole_m": sensor_distance_from_manhole_m,
+            "sensor_orientation": sensor_orientation,
+            "sensor_mount_type": sensor_mount_type,
+            "datum_reference_desc": datum_reference_desc,
+            "level_range_min_mm": level_range_min_mm,
+            "level_range_max_mm": level_range_max_mm,
+            "velocity_range_min_ms": velocity_range_min_ms,
+            "velocity_range_max_ms": velocity_range_max_ms,
+            "output_scaling_desc": output_scaling_desc,
+            "logging_interval_min": logging_interval_min,
+            "timezone": timezone,
+            "comms_method": comms_method,
+            "telemetry_logger_id": telemetry_logger_id,
+            "telemetry_server": telemetry_server,
+            "telemetry_notes": telemetry_notes,
+            "depth_check_meas_mm": depth_check_meas_mm,
+            "depth_check_meter_mm": depth_check_meter_mm,
+            "depth_check_tolerance_mm": depth_check_tolerance_mm,
+            "depth_check_diff_mm": depth_check_diff_mm,
+            "depth_check_within_tol": depth_check_within_tol,
+            "vel_check_meas_ms": vel_check_meas_ms,
+            "vel_check_meter_ms": vel_check_meter_ms,
+            "vel_check_diff_ms": vel_check_meter_ms - vel_check_meas_ms,
+            "comms_verified": comms_verified,
+            "comms_verified_at": comms_verified_at,
+            "zero_depth_check_done": zero_depth_check_done,
+            "zero_depth_check_notes": zero_depth_check_notes,
+            "reference_device_type": reference_device_type,
+            "reference_device_id": reference_device_id,
+            "reference_reading_desc": reference_reading_desc,
+            "verification_readings": updated_extra,
+            "calibration_rating": calibration_rating,
+            "calibration_comment": calibration_comment,
+            "modelling_notes": modelling_notes,
+            "data_quality_risks": data_quality_risks,
+            "chk_sensor_in_main_flow": chk_sensor_in_main_flow,
+            "chk_no_immediate_drops": chk_no_immediate_drops,
+            "chk_depth_range_ok": chk_depth_range_ok,
+            "chk_logging_started": chk_logging_started,
+            "chk_comms_checked_platform": chk_comms_checked_platform,
+            "diagram": diagram_obj,
+            "photos": all_photos,
+            "prepared_by": prepared_by,
+            "prepared_position": prepared_position,
+            "prepared_date": str(prepared_date),
+            "reviewed_by": reviewed_by,
+            "reviewed_position": reviewed_position,
+            "reviewed_date": str(reviewed_date),
+        }
+        site_record.update(derived)
+
+        # Enforce uniqueness: site name (manhole) only
+        for i, s in enumerate(sites):
+            if (
+                i != (edit_index if edit_index is not None else -1)
+                and s.get("site_name") == site_name
+            ):
+                st.error(
+                    "A site with this **site / manhole name** already exists. "
+                    "Please adjust the name or load that site for editing."
+                )
+                st.stop()
+
+        if edit_index is None:
+            st.session_state["sites"].append(site_record)
+            st.success("Site added to current project.")
+            # Clear GPS and address for next site entry
+            st.session_state["gps_lat"] = ""
+            st.session_state["gps_lon"] = ""
+            st.session_state["gps_last_clicked"] = None
+            st.session_state["auto_address"] = ""
+            st.session_state["last_geocoded_coords"] = None
+        else:
+            st.session_state["sites"][edit_index] = site_record
+            st.success("Site updated.")
+
+        st.session_state["draft_site"] = site_record
+        st.session_state["edit_index"] = None
+
+# ---------- Current sites / edit / delete ----------
+st.subheader("Current Sites in Project")
+
+if not sites:
+    st.info("No sites added yet. Use the form above to add your first site.")
 else:
-    # Actually the type of Ellipsis is <type 'ellipsis'>, but since it's
-    # not exposed anywhere under that name, we make it private here.
-    @final
-    @type_check_only
-    class ellipsis: ...
+    options = [f"{i+1}. {s['project_name']} – {s['site_name']}" for i, s in enumerate(sites)]
+    idx = st.selectbox(
+        "Select a site to edit / delete",
+        options=range(len(sites)),
+        format_func=lambda i: options[i],
+        key="site_select",
+    )
 
-    Ellipsis: ellipsis
+    col_actions1, col_actions2, col_actions3 = st.columns([1, 1, 4])
+    with col_actions1:
+        if st.button("✏️ Load selected for editing"):
+            st.session_state["draft_site"] = sites[idx]
+            st.session_state["edit_index"] = idx
+            st.session_state["gps_lat"] = sites[idx].get("gps_lat", "")
+            st.session_state["gps_lon"] = sites[idx].get("gps_lon", "")
+            st.session_state["auto_address"] = sites[idx].get("site_address", "")
+            safe_rerun()
+    with col_actions2:
+        if st.button("🗑️ Delete selected site"):
+            st.session_state["sites"].pop(idx)
+            st.session_state["draft_site"] = None
+            st.session_state["edit_index"] = None
+            st.session_state["gps_lat"] = ""
+            st.session_state["gps_lon"] = ""
+            st.session_state["gps_last_clicked"] = None
+            st.session_state["auto_address"] = ""
+            st.session_state["last_geocoded_coords"] = None
+            st.success("Site deleted from project.")
+            safe_rerun()
 
-@disjoint_base
-class BaseException:
-    args: tuple[Any, ...]
-    __cause__: BaseException | None
-    __context__: BaseException | None
-    __suppress_context__: bool
-    __traceback__: TracebackType | None
-    def __init__(self, *args: object) -> None: ...
-    def __new__(cls, *args: Any, **kwds: Any) -> Self: ...
-    def __setstate__(self, state: dict[str, Any] | None, /) -> None: ...
-    def with_traceback(self, tb: TracebackType | None, /) -> Self: ...
-    # Necessary for security-focused static analyzers (e.g, pysa)
-    # See https://github.com/python/typeshed/pull/14900
-    def __str__(self) -> str: ...  # noqa: Y029
-    def __repr__(self) -> str: ...  # noqa: Y029
-    if sys.version_info >= (3, 11):
-        # only present after add_note() is called
-        __notes__: list[str]
-        def add_note(self, note: str, /) -> None: ...
+# ---------- Export section ----------
+st.subheader("Export")
 
-class GeneratorExit(BaseException): ...
-class KeyboardInterrupt(BaseException): ...
-
-@disjoint_base
-class SystemExit(BaseException):
-    code: sys._ExitCode
-
-class Exception(BaseException): ...
-
-@disjoint_base
-class StopIteration(Exception):
-    value: Any
-
-@disjoint_base
-class OSError(Exception):
-    errno: int | None
-    strerror: str | None
-    # filename, filename2 are actually str | bytes | None
-    filename: Any
-    filename2: Any
-    if sys.platform == "win32":
-        winerror: int
-
-EnvironmentError = OSError
-IOError = OSError
-if sys.platform == "win32":
-    WindowsError = OSError
-
-class ArithmeticError(Exception): ...
-class AssertionError(Exception): ...
-
-if sys.version_info >= (3, 10):
-    @disjoint_base
-    class AttributeError(Exception):
-        def __init__(self, *args: object, name: str | None = None, obj: object = None) -> None: ...
-        name: str | None
-        obj: object
-
+if not sites:
+    st.info("Add at least one site to enable exports.")
 else:
-    class AttributeError(Exception): ...
+    col_exp1, col_exp2 = st.columns([1, 1])
 
-class BufferError(Exception): ...
-class EOFError(Exception): ...
+    with col_exp1:
+        excel_bytes = create_excel_bytes(sites)
+        st.download_button(
+            "⬇️ Export all sites to Excel",
+            data=excel_bytes,
+            file_name="sewer_flow_installation_sites.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
-@disjoint_base
-class ImportError(Exception):
-    def __init__(self, *args: object, name: str | None = None, path: str | None = None) -> None: ...
-    name: str | None
-    path: str | None
-    msg: str  # undocumented
-    if sys.version_info >= (3, 12):
-        name_from: str | None  # undocumented
-
-class LookupError(Exception): ...
-class MemoryError(Exception): ...
-
-if sys.version_info >= (3, 10):
-    @disjoint_base
-    class NameError(Exception):
-        def __init__(self, *args: object, name: str | None = None) -> None: ...
-        name: str | None
-
-else:
-    class NameError(Exception): ...
-
-class ReferenceError(Exception): ...
-class RuntimeError(Exception): ...
-class StopAsyncIteration(Exception): ...
-
-@disjoint_base
-class SyntaxError(Exception):
-    msg: str
-    filename: str | None
-    lineno: int | None
-    offset: int | None
-    text: str | None
-    # Errors are displayed differently if this attribute exists on the exception.
-    # The value is always None.
-    print_file_and_line: None
-    if sys.version_info >= (3, 10):
-        end_lineno: int | None
-        end_offset: int | None
-
-    @overload
-    def __init__(self) -> None: ...
-    @overload
-    def __init__(self, msg: object, /) -> None: ...
-    # Second argument is the tuple (filename, lineno, offset, text)
-    @overload
-    def __init__(self, msg: str, info: tuple[str | None, int | None, int | None, str | None], /) -> None: ...
-    if sys.version_info >= (3, 10):
-        # end_lineno and end_offset must both be provided if one is.
-        @overload
-        def __init__(
-            self, msg: str, info: tuple[str | None, int | None, int | None, str | None, int | None, int | None], /
-        ) -> None: ...
-    # If you provide more than two arguments, it still creates the SyntaxError, but
-    # the arguments from the info tuple are not parsed. This form is omitted.
-
-class SystemError(Exception): ...
-class TypeError(Exception): ...
-class ValueError(Exception): ...
-class FloatingPointError(ArithmeticError): ...
-class OverflowError(ArithmeticError): ...
-class ZeroDivisionError(ArithmeticError): ...
-class ModuleNotFoundError(ImportError): ...
-class IndexError(LookupError): ...
-class KeyError(LookupError): ...
-class UnboundLocalError(NameError): ...
-
-class BlockingIOError(OSError):
-    characters_written: int
-
-class ChildProcessError(OSError): ...
-class ConnectionError(OSError): ...
-class BrokenPipeError(ConnectionError): ...
-class ConnectionAbortedError(ConnectionError): ...
-class ConnectionRefusedError(ConnectionError): ...
-class ConnectionResetError(ConnectionError): ...
-class FileExistsError(OSError): ...
-class FileNotFoundError(OSError): ...
-class InterruptedError(OSError): ...
-class IsADirectoryError(OSError): ...
-class NotADirectoryError(OSError): ...
-class PermissionError(OSError): ...
-class ProcessLookupError(OSError): ...
-class TimeoutError(OSError): ...
-class NotImplementedError(RuntimeError): ...
-class RecursionError(RuntimeError): ...
-class IndentationError(SyntaxError): ...
-class TabError(IndentationError): ...
-class UnicodeError(ValueError): ...
-
-@disjoint_base
-class UnicodeDecodeError(UnicodeError):
-    encoding: str
-    object: bytes
-    start: int
-    end: int
-    reason: str
-    def __init__(self, encoding: str, object: ReadableBuffer, start: int, end: int, reason: str, /) -> None: ...
-
-@disjoint_base
-class UnicodeEncodeError(UnicodeError):
-    encoding: str
-    object: str
-    start: int
-    end: int
-    reason: str
-    def __init__(self, encoding: str, object: str, start: int, end: int, reason: str, /) -> None: ...
-
-@disjoint_base
-class UnicodeTranslateError(UnicodeError):
-    encoding: None
-    object: str
-    start: int
-    end: int
-    reason: str
-    def __init__(self, object: str, start: int, end: int, reason: str, /) -> None: ...
-
-class Warning(Exception): ...
-class UserWarning(Warning): ...
-class DeprecationWarning(Warning): ...
-class SyntaxWarning(Warning): ...
-class RuntimeWarning(Warning): ...
-class FutureWarning(Warning): ...
-class PendingDeprecationWarning(Warning): ...
-class ImportWarning(Warning): ...
-class UnicodeWarning(Warning): ...
-class BytesWarning(Warning): ...
-class ResourceWarning(Warning): ...
-
-if sys.version_info >= (3, 10):
-    class EncodingWarning(Warning): ...
-
-if sys.version_info >= (3, 11):
-    _BaseExceptionT_co = TypeVar("_BaseExceptionT_co", bound=BaseException, covariant=True, default=BaseException)
-    _BaseExceptionT = TypeVar("_BaseExceptionT", bound=BaseException)
-    _ExceptionT_co = TypeVar("_ExceptionT_co", bound=Exception, covariant=True, default=Exception)
-    _ExceptionT = TypeVar("_ExceptionT", bound=Exception)
-
-    # See `check_exception_group.py` for use-cases and comments.
-    @disjoint_base
-    class BaseExceptionGroup(BaseException, Generic[_BaseExceptionT_co]):
-        def __new__(cls, message: str, exceptions: Sequence[_BaseExceptionT_co], /) -> Self: ...
-        def __init__(self, message: str, exceptions: Sequence[_BaseExceptionT_co], /) -> None: ...
-        @property
-        def message(self) -> str: ...
-        @property
-        def exceptions(self) -> tuple[_BaseExceptionT_co | BaseExceptionGroup[_BaseExceptionT_co], ...]: ...
-        @overload
-        def subgroup(
-            self, matcher_value: type[_ExceptionT] | tuple[type[_ExceptionT], ...], /
-        ) -> ExceptionGroup[_ExceptionT] | None: ...
-        @overload
-        def subgroup(
-            self, matcher_value: type[_BaseExceptionT] | tuple[type[_BaseExceptionT], ...], /
-        ) -> BaseExceptionGroup[_BaseExceptionT] | None: ...
-        @overload
-        def subgroup(
-            self, matcher_value: Callable[[_BaseExceptionT_co | Self], bool], /
-        ) -> BaseExceptionGroup[_BaseExceptionT_co] | None: ...
-        @overload
-        def split(
-            self, matcher_value: type[_ExceptionT] | tuple[type[_ExceptionT], ...], /
-        ) -> tuple[ExceptionGroup[_ExceptionT] | None, BaseExceptionGroup[_BaseExceptionT_co] | None]: ...
-        @overload
-        def split(
-            self, matcher_value: type[_BaseExceptionT] | tuple[type[_BaseExceptionT], ...], /
-        ) -> tuple[BaseExceptionGroup[_BaseExceptionT] | None, BaseExceptionGroup[_BaseExceptionT_co] | None]: ...
-        @overload
-        def split(
-            self, matcher_value: Callable[[_BaseExceptionT_co | Self], bool], /
-        ) -> tuple[BaseExceptionGroup[_BaseExceptionT_co] | None, BaseExceptionGroup[_BaseExceptionT_co] | None]: ...
-        # In reality it is `NonEmptySequence`:
-        @overload
-        def derive(self, excs: Sequence[_ExceptionT], /) -> ExceptionGroup[_ExceptionT]: ...
-        @overload
-        def derive(self, excs: Sequence[_BaseExceptionT], /) -> BaseExceptionGroup[_BaseExceptionT]: ...
-        def __class_getitem__(cls, item: Any, /) -> GenericAlias: ...
-
-    class ExceptionGroup(BaseExceptionGroup[_ExceptionT_co], Exception):
-        def __new__(cls, message: str, exceptions: Sequence[_ExceptionT_co], /) -> Self: ...
-        def __init__(self, message: str, exceptions: Sequence[_ExceptionT_co], /) -> None: ...
-        @property
-        def exceptions(self) -> tuple[_ExceptionT_co | ExceptionGroup[_ExceptionT_co], ...]: ...
-        # We accept a narrower type, but that's OK.
-        @overload  # type: ignore[override]
-        def subgroup(
-            self, matcher_value: type[_ExceptionT] | tuple[type[_ExceptionT], ...], /
-        ) -> ExceptionGroup[_ExceptionT] | None: ...
-        @overload
-        def subgroup(
-            self, matcher_value: Callable[[_ExceptionT_co | Self], bool], /
-        ) -> ExceptionGroup[_ExceptionT_co] | None: ...
-        @overload  # type: ignore[override]
-        def split(
-            self, matcher_value: type[_ExceptionT] | tuple[type[_ExceptionT], ...], /
-        ) -> tuple[ExceptionGroup[_ExceptionT] | None, ExceptionGroup[_ExceptionT_co] | None]: ...
-        @overload
-        def split(
-            self, matcher_value: Callable[[_ExceptionT_co | Self], bool], /
-        ) -> tuple[ExceptionGroup[_ExceptionT_co] | None, ExceptionGroup[_ExceptionT_co] | None]: ...
-
-if sys.version_info >= (3, 13):
-    class PythonFinalizationError(RuntimeError): ...
+    with col_exp2:
+        pdf_idx = st.selectbox(
+            "Select a site for PDF export",
+            options=range(len(sites)),
+            format_func=lambda i: f"{i+1}. {sites[i]['project_name']} – {sites[i]['site_name']}",
+            key="pdf_site_select",
+        )
+        pdf_bytes = create_pdf_bytes([sites[pdf_idx]])
+        proj = sites[pdf_idx].get("project_name", "project").replace(" ", "_")
+        sname = sites[pdf_idx].get("site_name", "site").replace(" ", "_")
+        st.download_button(
+            "📄 Export selected site to PDF",
+            data=pdf_bytes,
+            file_name=f"{proj}_{sname}_installation_report.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
