@@ -1,8 +1,10 @@
-streamlit
-reportlab
+streamlit==1.39.0
 pandas
 folium
 streamlit-folium
+reportlab
+PyPDF2
+geopy
 staticmap
 streamlit-js-eval
 openpyxl
