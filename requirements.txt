@@ -8,3 +8,4 @@ geopy
 staticmap
 streamlit-js-eval
 openpyxl
+geopy==2.4.1
