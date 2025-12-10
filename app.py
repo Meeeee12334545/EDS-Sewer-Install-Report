@@ -89,9 +89,17 @@ def decode_binary_data(site_record):
     # Decode diagram
     if decoded.get("diagram") and decoded["diagram"].get("data"):
         decoded["diagram"] = decoded["diagram"].copy()
-        try:
-            decoded["diagram"]["data"] = base64.b64decode(decoded["diagram"]["data"])
-        except Exception:
+        payload = decoded["diagram"].get("data")
+        if isinstance(payload, (bytes, bytearray)):
+            decoded["diagram"]["data"] = bytes(payload)
+        elif isinstance(payload, memoryview):
+            decoded["diagram"]["data"] = payload.tobytes()
+        elif isinstance(payload, str):
+            try:
+                decoded["diagram"]["data"] = base64.b64decode(payload)
+            except Exception:
+                decoded["diagram"]["data"] = b""
+        else:
             decoded["diagram"]["data"] = b""
     
     # Decode photos
@@ -99,11 +107,20 @@ def decode_binary_data(site_record):
         decoded["photos"] = []
         for photo in site_record["photos"]:
             photo_copy = photo.copy()
-            if photo_copy.get("data"):
+            payload = photo_copy.get("data")
+            if isinstance(payload, (bytes, bytearray)):
+                photo_copy["data"] = bytes(payload)
+            elif isinstance(payload, memoryview):
+                photo_copy["data"] = payload.tobytes()
+            elif isinstance(payload, str):
                 try:
-                    photo_copy["data"] = base64.b64decode(photo_copy["data"])
+                    photo_copy["data"] = base64.b64decode(payload)
                 except Exception:
                     photo_copy["data"] = b""
+            elif payload is None:
+                photo_copy["data"] = None
+            else:
+                photo_copy["data"] = b""
             decoded["photos"].append(photo_copy)
     
     return decoded
@@ -140,11 +157,9 @@ def _load_all_reports_from_disk():
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # Decode binary data
-                decoded = decode_binary_data(data)
-                decoded["_filename"] = filepath.name
-                decoded["_filepath"] = str(filepath)
-                reports.append(decoded)
+                data["_filename"] = filepath.name
+                data["_filepath"] = str(filepath)
+                reports.append(data)
         except Exception as e:
             st.warning(f"Could not load {filepath.name}: {e}")
 
@@ -154,6 +169,11 @@ def _load_all_reports_from_disk():
 def clear_saved_reports_cache():
     """Remove any cached saved reports (forces disk reload on next access)."""
     st.session_state.pop("_saved_reports_cache", None)
+    st.session_state.pop("_saved_reports_asset_cache", None)
+
+
+def _get_saved_reports_asset_cache():
+    return st.session_state.setdefault("_saved_reports_asset_cache", {})
 
 
 def load_all_reports(force_refresh: bool = False):
@@ -174,7 +194,8 @@ def load_report_into_form(report: dict, *, edit_index=None, success_message: Opt
         return
 
     # Make a defensive copy so editing the draft never mutates cached records.
-    draft_copy = copy.deepcopy(report)
+    report_copy = copy.deepcopy(report)
+    draft_copy = decode_binary_data(report_copy)
 
     st.session_state["draft_site"] = draft_copy
     st.session_state["edit_index"] = edit_index
@@ -2901,28 +2922,40 @@ else:
                         )
                 
                 with col_act2:
-                    # Export single report to PDF
-                    pdf_single = create_pdf_bytes([report])
-                    proj_name = report.get("project_name", "project").replace(" ", "_")
-                    site_name = report.get("site_name", "site").replace(" ", "_")
-                    st.download_button(
-                        "📄 PDF",
-                        data=pdf_single,
-                        file_name=f"{proj_name}_{site_name}_report.pdf",
-                        mime="application/pdf",
-                        key=f"pdf_{filename}",
-                    )
+                        # Export single report to PDF (cached per filename)
+                        proj_name = report.get("project_name", "project").replace(" ", "_")
+                        site_name = report.get("site_name", "site").replace(" ", "_")
+                        cache = _get_saved_reports_asset_cache()
+                        cache_key = f"pdf:{filename}"
+                        pdf_single_bytes = cache.get(cache_key)
+                        if pdf_single_bytes is None:
+                            decoded_report = decode_binary_data(copy.deepcopy(report))
+                            pdf_single_bytes = create_pdf_bytes([decoded_report]).getvalue()
+                            cache[cache_key] = pdf_single_bytes
+                        st.download_button(
+                            "📄 PDF",
+                            data=pdf_single_bytes,
+                            file_name=f"{proj_name}_{site_name}_report.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_{filename}",
+                        )
                 
                 with col_act3:
-                    # Export to Excel
-                    excel_single = create_excel_bytes([report])
-                    st.download_button(
-                        "📊 Excel",
-                        data=excel_single,
-                        file_name=f"{proj_name}_{site_name}_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"excel_{filename}",
-                    )
+                        # Export to Excel (cached per filename)
+                        cache = _get_saved_reports_asset_cache()
+                        cache_key = f"excel:{filename}"
+                        excel_single_bytes = cache.get(cache_key)
+                        if excel_single_bytes is None:
+                            decoded_report = decode_binary_data(copy.deepcopy(report))
+                            excel_single_bytes = create_excel_bytes([decoded_report]).getvalue()
+                            cache[cache_key] = excel_single_bytes
+                        st.download_button(
+                            "📊 Excel",
+                            data=excel_single_bytes,
+                            file_name=f"{proj_name}_{site_name}_data.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"excel_{filename}",
+                        )
                 
                 with col_act4:
                     if st.button("🗑️ Delete", key=f"delete_{filename}"):
@@ -2940,7 +2973,10 @@ else:
         with col_bulk1:
             # Export all filtered reports to Excel
             if filtered_reports:
-                excel_all = create_excel_bytes(filtered_reports)
+                decoded_reports = [
+                    decode_binary_data(copy.deepcopy(r)) for r in filtered_reports
+                ]
+                excel_all = create_excel_bytes(decoded_reports)
                 st.download_button(
                     "📊 Export all filtered reports to Excel",
                     data=excel_all,
@@ -2951,7 +2987,10 @@ else:
         with col_bulk2:
             # Export all filtered reports to a combined PDF
             if filtered_reports:
-                pdf_all = create_pdf_bytes(filtered_reports)
+                decoded_reports = [
+                    decode_binary_data(copy.deepcopy(r)) for r in filtered_reports
+                ]
+                pdf_all = create_pdf_bytes(decoded_reports)
                 st.download_button(
                     "📄 Export all filtered reports to PDF",
                     data=pdf_all,
