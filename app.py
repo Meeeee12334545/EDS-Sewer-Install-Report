@@ -1,15 +1,18 @@
+import base64
 import hashlib
 import io
 import json
 import math
 import os
-import base64
-from datetime import time, date, datetime
+import re
+from datetime import datetime, time, date, timezone as datetime_timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
 import time as _time
+import requests
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -35,7 +38,6 @@ try:
     GEO_AVAILABLE = True
 except ImportError:
     GEO_AVAILABLE = False
-
 
 # ---------- Database functions for storing/loading reports ----------
 REPORTS_DIR = Path(__file__).parent / "data" / "reports"
@@ -161,6 +163,8 @@ def get_report_summary(report):
     site = report.get("site_name", "Unknown Site")
     date_str = report.get("install_date", "Unknown Date")
     return f"{project} - {site} ({date_str})"
+# Offset between the header bar and the start of body content on each page
+HEADER_CONTENT_OFFSET = 60 * mm
 
 
 # ---------- Canvas with "page x of y" ----------
@@ -388,7 +392,7 @@ def draw_site_main_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 23 * mm
+    y = height - HEADER_CONTENT_OFFSET
 
     # 1. Project details
     draw_section_title(c, "1. Project", margin, y)
@@ -530,7 +534,7 @@ def draw_site_commissioning_page(c, site, width, height):
                 site.get("site_id", ""),
                 site.get("site_name", ""),
             )
-            return height - 23 * mm
+            return height - HEADER_CONTENT_OFFSET
         return y_current
 
     draw_header_bar(
@@ -540,7 +544,7 @@ def draw_site_commissioning_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 23 * mm
+    y = height - HEADER_CONTENT_OFFSET
 
     # 4. Meter, sensor & configuration
     draw_section_title(c, "4. Meter, Sensor & Configuration", margin, y)
@@ -777,7 +781,7 @@ def draw_site_commissioning_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 23 * mm
+    y = height - HEADER_CONTENT_OFFSET
     max_w = width - 2 * margin
     max_diag_h = 70 * mm
     max_map_h = 60 * mm
@@ -828,7 +832,7 @@ def draw_site_commissioning_page(c, site, width, height):
                 site.get("site_id", ""),
                 site.get("site_name", ""),
             )
-            y = height - 23 * mm
+            y = height - HEADER_CONTENT_OFFSET
 
         draw_section_title(c, f"{section_idx}. Site location map", margin, y)
         y -= line_height * 1.5
@@ -864,7 +868,7 @@ def draw_site_commissioning_page(c, site, width, height):
             site.get("site_id", ""),
             site.get("site_name", ""),
         )
-        y = height - 23 * mm
+        y = height - HEADER_CONTENT_OFFSET
 
     draw_section_title(c, f"{section_idx}. Reporting", margin, y)
     y -= line_height * 1.5
@@ -905,7 +909,7 @@ def draw_site_photos(c, site, photos, width, height):
             site.get("site_id", ""),
             site.get("site_name", ""),
         )
-        y0 = height - 23 * mm
+        y0 = height - HEADER_CONTENT_OFFSET
         c.setFont("Helvetica-Bold", 11)
         c.drawString(
             margin,
@@ -1069,6 +1073,174 @@ def merge_photo_records(existing_photos, new_photos):
             _store(copy, data_bytes, fallback_key=f"new-{idx}")
 
     return [merged_by_hash[key] for key in insertion_order]
+
+
+# ---------- GitHub storage helpers ----------
+def slugify_path_component(value: str | None, fallback: str = "item") -> str:
+    text = (value or "").strip()
+    if not text:
+        text = fallback
+    text = re.sub(r"[^A-Za-z0-9]+", "-", text)
+    text = re.sub(r"-+", "-", text)
+    text = text.strip("-").lower()
+    return text or fallback.lower()
+
+
+def generate_site_storage_path(site: dict, base_folder: str = "reports") -> str:
+    folder = (base_folder or "reports").strip().strip("/")
+    if not folder:
+        folder = "reports"
+    project_slug = slugify_path_component(site.get("project_name"), "project")
+    site_slug = slugify_path_component(site.get("site_name"), "site")
+    return f"{folder}/{project_slug}/{site_slug}.json"
+
+
+def _coerce_bytes_or_none(payload):
+    if isinstance(payload, bytes):
+        return payload
+    if isinstance(payload, bytearray):
+        return bytes(payload)
+    if isinstance(payload, memoryview):
+        return payload.tobytes()
+    return None
+
+
+def serialise_site_for_storage(site: dict) -> dict:
+    cleaned: dict[str, object] = {}
+    for key, value in site.items():
+        if key in {"photos", "diagram"}:
+            continue
+        if isinstance(value, (datetime, date, time)):
+            cleaned[key] = str(value)
+        else:
+            cleaned[key] = value
+
+    photos_meta = []
+    for photo in site.get("photos") or []:
+        if not isinstance(photo, dict):
+            continue
+        data_bytes = _coerce_bytes_or_none(photo.get("data"))
+        entry = {
+            "name": (photo.get("name") or "").strip() or "Site photo",
+            "mime": photo.get("mime"),
+        }
+        if data_bytes:
+            entry["sha256"] = hashlib.sha256(data_bytes).hexdigest()
+            entry["size_bytes"] = len(data_bytes)
+        photos_meta.append(entry)
+    if photos_meta:
+        cleaned["photos_metadata"] = photos_meta
+
+    diagram = site.get("diagram")
+    if isinstance(diagram, dict):
+        diag_bytes = _coerce_bytes_or_none(diagram.get("data"))
+        diag_entry = {
+            "name": diagram.get("name"),
+            "mime": diagram.get("mime"),
+        }
+        if diag_bytes:
+            diag_entry["sha256"] = hashlib.sha256(diag_bytes).hexdigest()
+            diag_entry["size_bytes"] = len(diag_bytes)
+        cleaned["diagram_metadata"] = diag_entry
+
+    cleaned["bundle_generated_at_utc"] = datetime.now(datetime_timezone.utc).isoformat()
+    return cleaned
+
+
+def build_site_report_bundle(site: dict, pdf_bytes: bytes | bytearray | memoryview) -> dict:
+    pdf_payload = _coerce_bytes_or_none(pdf_bytes)
+    if pdf_payload is None:
+        raise TypeError("pdf_bytes must be bytes-like")
+    return {
+        "bundle_version": 1,
+        "site": serialise_site_for_storage(site),
+        "pdf_base64": base64.b64encode(pdf_payload).decode("ascii"),
+    }
+
+
+def upload_site_report_to_github(
+    site: dict,
+    pdf_bytes: bytes | bytearray | memoryview,
+    repo_full_name: str,
+    *,
+    token: str | None = None,
+    branch: str = "main",
+    base_folder: str = "reports",
+    session: requests.Session | None = None,
+) -> dict:
+    if not repo_full_name or "/" not in repo_full_name:
+        raise ValueError("'repo_full_name' must look like 'owner/repo'.")
+
+    resolved_token = (
+        token
+        or os.getenv("GITHUB_REPORT_TOKEN")
+        or os.getenv("GITHUB_TOKEN")
+    )
+    if not resolved_token:
+        raise RuntimeError(
+            "GitHub token not configured. Set GITHUB_REPORT_TOKEN or pass 'token'."
+        )
+
+    owner, repo = repo_full_name.split("/", 1)
+    storage_path = generate_site_storage_path(site, base_folder=base_folder)
+    bundle = build_site_report_bundle(site, pdf_bytes)
+    bundle_json = json.dumps(bundle, indent=2, sort_keys=True)
+    encoded_content = base64.b64encode(bundle_json.encode("utf-8")).decode("ascii")
+
+    headers = {
+        "Authorization": f"Bearer {resolved_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    sess = session or requests.Session()
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{quote(storage_path, safe='/')}"
+    params = {"ref": branch} if branch else None
+
+    response = sess.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        try:
+            existing = response.json()
+        except Exception as exc:
+            raise RuntimeError("Failed to decode GitHub response when checking existing file") from exc
+        sha = existing.get("sha") or existing.get("content", {}).get("sha")
+        commit_prefix = "Update"
+    elif response.status_code == 404:
+        sha = None
+        commit_prefix = "Add"
+    else:
+        raise RuntimeError(
+            f"GitHub API responded with {response.status_code} while checking existing file: {response.text}"
+        )
+
+    site_name = (site.get("site_name") or "installation").strip() or "installation"
+    commit_message = f"{commit_prefix} installation report for {site_name}"
+
+    payload = {
+        "message": commit_message,
+        "content": encoded_content,
+    }
+    if branch:
+        payload["branch"] = branch
+    if sha:
+        payload["sha"] = sha
+
+    put_response = sess.put(url, headers=headers, json=payload)
+    if put_response.status_code not in (200, 201):
+        raise RuntimeError(
+            f"GitHub API responded with {put_response.status_code} while uploading report: {put_response.text}"
+        )
+
+    try:
+        put_json = put_response.json()
+    except Exception:
+        put_json = {}
+
+    return {
+        "path": storage_path,
+        "commit_sha": put_json.get("commit", {}).get("sha"),
+        "html_url": put_json.get("content", {}).get("html_url"),
+    }
 
 
 # ---------- Excel export ----------
@@ -2494,7 +2666,8 @@ else:
             format_func=lambda i: f"{i+1}. {sites[i]['project_name']} – {sites[i]['site_name']}",
             key="pdf_site_select",
         )
-        pdf_bytes = create_pdf_bytes([sites[pdf_idx]])
+        pdf_buffer = create_pdf_bytes([sites[pdf_idx]])
+        pdf_bytes = pdf_buffer.getvalue()
         proj = sites[pdf_idx].get("project_name", "project").replace(" ", "_")
         sname = sites[pdf_idx].get("site_name", "site").replace(" ", "_")
         st.download_button(
@@ -2504,6 +2677,8 @@ else:
             mime="application/pdf",
             use_container_width=True,
         )
+
+    selected_site = sites[pdf_idx]
 
 # ---------- Saved Reports Database Section ----------
 st.markdown("---")
@@ -2684,3 +2859,69 @@ st.caption(
     "and are tracked by Git. This means all your installation reports are versioned "
     "and backed up in your GitHub repository."
 )
+
+    st.markdown("---")
+    st.subheader("GitHub Storage")
+
+    token_env = os.getenv("GITHUB_REPORT_TOKEN") or os.getenv("GITHUB_TOKEN")
+    try:
+        token_secret = (
+            st.secrets.get("github_report_token")
+            if hasattr(st, "secrets")
+            else None
+        )
+    except Exception:
+        token_secret = None
+    github_token = token_secret or token_env
+
+    default_repo = os.getenv("GITHUB_REPORT_REPO", "")
+    default_branch = os.getenv("GITHUB_REPORT_BRANCH", "main")
+    default_folder = os.getenv("GITHUB_REPORT_FOLDER", "reports")
+
+    repo_value = st.text_input(
+        "GitHub repository (owner/name)",
+        value=st.session_state.get("github_repo", default_repo),
+        key="github_repo_input",
+        help="Example: organisation/eds-install-reports",
+    )
+    branch_value = st.text_input(
+        "Branch",
+        value=st.session_state.get("github_branch", default_branch),
+        key="github_branch_input",
+    )
+    folder_value = st.text_input(
+        "Destination folder in repository",
+        value=st.session_state.get("github_folder", default_folder),
+        key="github_folder_input",
+        help="Reports are stored as JSON bundles inside this folder.",
+    )
+
+    st.session_state["github_repo"] = repo_value
+    st.session_state["github_branch"] = branch_value
+    st.session_state["github_folder"] = folder_value
+
+    if not github_token:
+        st.info(
+            "Set a `GITHUB_REPORT_TOKEN` environment variable (or `github_report_token` secret) with repo write access to enable uploads."
+        )
+    elif not repo_value.strip():
+        st.info("Enter the target GitHub repository to enable uploads.")
+    else:
+        if st.button(
+            "⬆️ Upload selected site bundle to GitHub",
+            use_container_width=True,
+            key="github_upload_button",
+        ):
+            try:
+                result = upload_site_report_to_github(
+                    selected_site,
+                    pdf_bytes,
+                    repo_value.strip(),
+                    token=github_token,
+                    branch=branch_value.strip() or "main",
+                    base_folder=folder_value.strip() or "reports",
+                )
+                destination = result.get("html_url") or result.get("path")
+                st.success(f"Report uploaded to GitHub ({destination}).")
+            except Exception as exc:
+                st.error(f"GitHub upload failed: {exc}")

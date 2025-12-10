@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # EDS Sewer Flow Meter Installation Report
 
 A professional Streamlit application for creating standardized sewer flow meter installation reports for Environmental Data Services (EDS).
@@ -164,3 +165,122 @@ Proprietary - Environmental Data Services
 ## Support
 
 For issues or questions, please contact EDS support.
+=======
+# EDS Sewer Installation Report
+
+A professional Streamlit application for creating standardised sewer flow meter installation reports for Environmental Data Services (EDS). The tool captures all site details, produces polished PDF/Excel exports, and now offers both Git-backed storage and optional direct uploads to GitHub via the API.
+
+## Features
+
+### 📝 Comprehensive Installation Reporting
+- Guided form covering project, site, hydraulic, and commissioning details
+- Interactive map with click-to-fill GPS coordinates and reverse geocoding
+- Supports device GPS (where available) and automatic address lookup
+- Photo and diagram uploads with captions for inclusion in reports
+
+### 💾 Flexible Storage Options
+- **Local database**: Save completed reports as JSON inside `data/reports/` (tracked by Git for version history).
+- **GitHub upload (optional)**: Push a bundled JSON (metadata + base64 PDF) straight to a GitHub repository using the Contents API.
+
+### 📄 Export Capabilities
+- Single-site PDF export with embedded metadata
+- Excel exports for collections of sites
+- Bulk PDF/Excel exports of saved reports
+- Static site maps and photo pages in generated PDFs
+
+### 🔍 Saved Reports Dashboard
+- Search, sort, and filter saved installations
+- Reload a saved report back into the form for editing
+- One-click delete, PDF, and Excel options for each saved record
+
+## Installation
+
+### Requirements
+
+```text
+streamlit
+reportlab
+pandas
+folium
+streamlit-folium
+staticmap
+streamlit-js-eval
+openpyxl
+PyPDF2
+geopy
+requests
+```
+
+### Setup
+1. Clone this repository.
+2. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Run the Streamlit application:
+
+   ```bash
+   streamlit run app.py
+   ```
+
+## Managing reports
+
+### Saving to the Git-backed database (default)
+1. Complete the form and click **“Add site to current project.”**
+2. Select the site from **Current Sites in Project** and click **💾 Save to database**.
+3. Reports are stored as JSON files under `data/reports/` and automatically versioned by Git.
+4. Use the **📚 Saved Reports Database** section to search, filter, reload, export, or delete saved reports.
+
+### Uploading directly to GitHub (optional)
+1. Create a personal access token with `repo` scope (or at least `contents:write`).
+2. Expose the token using one of the following methods:
+   - Add it to the `.env` file (placeholder provided) as `GITHUB_REPORT_TOKEN`.
+   - Export it in your shell before launching Streamlit: `export GITHUB_REPORT_TOKEN=...`.
+   - Supply it via `st.secrets["github_report_token"]` when deploying on Streamlit Cloud.
+3. (Optional) set defaults:
+   - `GITHUB_REPORT_REPO` – e.g. `your-org/install-reports`
+   - `GITHUB_REPORT_BRANCH` – defaults to `main`
+   - `GITHUB_REPORT_FOLDER` – defaults to `reports`
+4. In the **GitHub Storage** panel, select the target repository/branch/folder and click **⬆️ Upload selected site bundle to GitHub**.
+
+Each upload commits a JSON bundle (site metadata plus base64 PDF) to the specified repository via the GitHub Contents API.
+
+## Testing
+
+Run the full suite:
+
+```bash
+pytest
+```
+
+Or execute individual modules:
+
+```bash
+python -m unittest tests/test_database_functions.py -v
+python -m unittest tests/test_merge_photo_records.py -v
+python -m unittest tests/test_github_storage.py -v
+```
+
+## Project structure
+
+```
+.
+├── app.py                          # Main Streamlit application
+├── data/
+│   └── reports/                    # Saved installation reports (JSON)
+├── tests/
+│   ├── test_database_functions.py  # Database functionality tests
+│   ├── test_github_storage.py      # GitHub upload helpers tests
+│   └── test_merge_photo_records.py # Photo merging tests
+├── requirements.txt                # Python dependencies
+├── runtime.txt                     # Python version specification
+└── README.md                       # Project documentation
+```
+
+## License & Support
+
+Proprietary – Environmental Data Services. For issues or questions, please contact the EDS support team.
+
+>>>>>>> 85dcda8 (Add GitHub storage for reports)
