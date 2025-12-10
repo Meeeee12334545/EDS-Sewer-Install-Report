@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -7,6 +8,7 @@ import os
 import re
 from datetime import datetime, time, date, timezone as datetime_timezone
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 
 import pandas as pd
@@ -110,28 +112,29 @@ def decode_binary_data(site_record):
 def save_report_to_database(site_record):
     """Save a site report to the database as a JSON file."""
     ensure_reports_directory()
-    
+
     # Generate filename
     project = sanitize_filename(site_record.get("project_name", "unknown"))
     site = sanitize_filename(site_record.get("site_name", "unknown"))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{project}_{site}_{timestamp}.json"
     filepath = REPORTS_DIR / filename
-    
+
     # Encode binary data
     encoded_record = encode_binary_data(site_record)
-    
+
     # Save to JSON
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(encoded_record, f, indent=2, default=str)
-    
+
+    clear_saved_reports_cache()
     return filename
 
 
-def load_all_reports():
-    """Load all reports from the database."""
+def _load_all_reports_from_disk():
+    """Read all persisted reports from disk, decoding any binary blobs."""
     ensure_reports_directory()
-    
+
     reports = []
     for filepath in sorted(REPORTS_DIR.glob("*.json"), reverse=True):
         try:
@@ -144,8 +147,46 @@ def load_all_reports():
                 reports.append(decoded)
         except Exception as e:
             st.warning(f"Could not load {filepath.name}: {e}")
-    
+
     return reports
+
+
+def clear_saved_reports_cache():
+    """Remove any cached saved reports (forces disk reload on next access)."""
+    st.session_state.pop("_saved_reports_cache", None)
+
+
+def load_all_reports(force_refresh: bool = False):
+    """Load reports, using Streamlit session caching to avoid repeated disk IO."""
+    if force_refresh:
+        clear_saved_reports_cache()
+
+    cached = st.session_state.get("_saved_reports_cache")
+    if cached is None:
+        cached = _load_all_reports_from_disk()
+        st.session_state["_saved_reports_cache"] = cached
+    return cached
+
+
+def load_report_into_form(report: dict, *, edit_index=None, success_message: Optional[str] = None):
+    """Copy the provided report into the form session state and trigger feedback."""
+    if not report:
+        return
+
+    # Make a defensive copy so editing the draft never mutates cached records.
+    draft_copy = copy.deepcopy(report)
+
+    st.session_state["draft_site"] = draft_copy
+    st.session_state["edit_index"] = edit_index
+    st.session_state["gps_lat"] = draft_copy.get("gps_lat", "")
+    st.session_state["gps_lon"] = draft_copy.get("gps_lon", "")
+    st.session_state["auto_address"] = draft_copy.get("site_address", "")
+    st.session_state["site_address"] = draft_copy.get("site_address", "")
+
+    if success_message:
+        st.session_state["_flash_message"] = success_message
+    
+    safe_rerun()
 
 
 def delete_report_from_database(filename):
@@ -153,6 +194,7 @@ def delete_report_from_database(filename):
     filepath = REPORTS_DIR / filename
     if filepath.exists():
         filepath.unlink()
+        clear_saved_reports_cache()
         return True
     return False
 
@@ -1557,6 +1599,10 @@ sites = st.session_state["sites"]
 draft = st.session_state["draft_site"] or {}
 edit_index = st.session_state["edit_index"]
 
+flash_message = st.session_state.pop("_flash_message", None)
+if flash_message:
+    st.success(flash_message)
+
 # GPS / address session state (canonical, NOT widget keys)
 if "gps_lat" not in st.session_state:
     st.session_state["gps_lat"] = draft.get("gps_lat", "")
@@ -2369,16 +2415,68 @@ with st.form("site_form", clear_on_submit=False):
             }
         )
 
-    existing_photos = draft.get("photos", []) or []
-    if existing_photos and not photo_files:
-        st.info(
-            f"{len(existing_photos)} existing photo(s) already stored for this site. "
-            "They will be included in the PDF."
+    existing_photos_raw = draft.get("photos", []) or []
+    retained_photos = []
+    if existing_photos_raw:
+        st.markdown("**Existing photos**")
+        st.caption(
+            "Update captions below or untick a photo to remove it before saving."
         )
-    elif existing_photos and photo_files:
+        for i, photo in enumerate(existing_photos_raw):
+            default_name = photo.get("name") or f"Photo {i+1}"
+            name_col, keep_col = st.columns([4, 1])
+            with name_col:
+                edited_name = st.text_input(
+                    f"Caption for existing photo {i+1}",
+                    value=default_name,
+                    key=f"existing_photo_caption_{i}",
+                )
+            with keep_col:
+                keep_photo = st.checkbox(
+                    "Keep photo",
+                    value=True,
+                    key=f"existing_photo_keep_{i}",
+                )
+
+            with st.expander("Preview", expanded=False):
+                if photo.get("data"):
+                    try:
+                        st.image(
+                            photo["data"],
+                            caption=(edited_name or default_name),
+                            use_column_width=True,
+                        )
+                    except Exception:
+                        st.caption("Preview unavailable for this file.")
+                else:
+                    st.caption("No image data available.")
+
+            cleaned_name = (edited_name or "").strip() or "Site photo"
+            if keep_photo:
+                updated_photo = photo.copy()
+                updated_photo["name"] = cleaned_name
+                retained_photos.append(updated_photo)
+
+        removed_count = len(existing_photos_raw) - len(retained_photos)
+        if removed_count > 0:
+            st.info(
+                f"{removed_count} existing photo(s) will be removed when you submit the form."
+            )
+
+    existing_photos = retained_photos
+    if st.session_state.get("draft_site") is not None:
+        st.session_state["draft_site"]["photos"] = existing_photos
+    draft["photos"] = existing_photos
+
+    if existing_photos and new_photos:
         st.info(
             f"{len(existing_photos)} existing photo(s) plus "
             f"{len(new_photos)} new photo(s) will be stored."
+        )
+    elif existing_photos and not new_photos:
+        st.info(
+            f"{len(existing_photos)} existing photo(s) are ready for export. "
+            "Upload new photos or untick above if you need changes."
         )
 
     st.markdown("---")
@@ -2615,13 +2713,16 @@ else:
     col_actions1, col_actions2, col_actions3, col_actions4 = st.columns([1, 1, 1, 3])
     with col_actions1:
         if st.button("✏️ Load selected for editing"):
-            st.session_state["draft_site"] = sites[idx]
-            st.session_state["edit_index"] = idx
-            st.session_state["gps_lat"] = sites[idx].get("gps_lat", "")
-            st.session_state["gps_lon"] = sites[idx].get("gps_lon", "")
-            st.session_state["auto_address"] = sites[idx].get("site_address", "")
-            st.session_state["site_address"] = sites[idx].get("site_address", "")
-            safe_rerun()
+            site_name = sites[idx].get("site_name", "")
+            load_report_into_form(
+                sites[idx],
+                edit_index=idx,
+                success_message=(
+                    f"Loaded site '{site_name}' into the form for editing."
+                    if site_name
+                    else "Loaded site into the form for editing."
+                ),
+            )
     with col_actions2:
         if st.button("🗑️ Delete selected site"):
             st.session_state["sites"].pop(idx)
@@ -2633,7 +2734,7 @@ else:
             st.session_state["auto_address"] = ""
             st.session_state["site_address"] = ""
             st.session_state["last_geocoded_coords"] = None
-            st.success("Site deleted from project.")
+            st.session_state["_flash_message"] = "Site deleted from project."
             safe_rerun()
     with col_actions3:
         if st.button("💾 Save to database"):
@@ -2714,6 +2815,8 @@ else:
         st.write("")
         st.write("")
         if st.button("🔄 Refresh list"):
+            clear_saved_reports_cache()
+            st.session_state["_flash_message"] = "Saved reports list refreshed."
             safe_rerun()
     
     # Filter reports based on search
@@ -2786,15 +2889,16 @@ else:
                 
                 with col_act1:
                     if st.button("📥 Load to form", key=f"load_{filename}"):
-                        # Load this report into the form for editing
-                        st.session_state["draft_site"] = report
-                        st.session_state["edit_index"] = None
-                        st.session_state["gps_lat"] = report.get("gps_lat", "")
-                        st.session_state["gps_lon"] = report.get("gps_lon", "")
-                        st.session_state["auto_address"] = report.get("site_address", "")
-                        st.session_state["site_address"] = report.get("site_address", "")
-                        st.success("Report loaded into form. Scroll up to edit.")
-                        safe_rerun()
+                        site_name = report.get("site_name", "")
+                        load_report_into_form(
+                            report,
+                            edit_index=None,
+                            success_message=(
+                                f"Loaded saved report '{site_name}' into the form."
+                                if site_name
+                                else "Loaded saved report into the form."
+                            ),
+                        )
                 
                 with col_act2:
                     # Export single report to PDF
