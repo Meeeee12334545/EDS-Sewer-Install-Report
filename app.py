@@ -163,8 +163,11 @@ def get_report_summary(report):
     site = report.get("site_name", "Unknown Site")
     date_str = report.get("install_date", "Unknown Date")
     return f"{project} - {site} ({date_str})"
-# Offset between the header bar and the start of body content on each page
-HEADER_CONTENT_OFFSET = 15 * mm
+# Header layout constants
+HEADER_BAR_HEIGHT = 18 * mm
+HEADER_CONTENT_GAP = 15 * mm
+# Offset between the top of the page and the start of body content on each page
+HEADER_CONTENT_OFFSET = HEADER_BAR_HEIGHT + HEADER_CONTENT_GAP
 
 
 # ---------- Canvas with "page x of y" ----------
@@ -292,17 +295,16 @@ def create_site_map_bytes(lat_str, lon_str, zoom=19, width_px=600, height_px=400
 # ---------- PDF layout helpers ----------
 def draw_header_bar(c, width, project, site_id, site_name):
     margin = 20 * mm
-    bar_height = 18 * mm
     c.setFillColor(HexColor("#3d9991"))
-    c.rect(0, A4[1] - bar_height, width, bar_height, fill=1, stroke=0)
+    c.rect(0, A4[1] - HEADER_BAR_HEIGHT, width, HEADER_BAR_HEIGHT, fill=1, stroke=0)
 
     c.setFillColor(HexColor("#FFFFFF"))
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin, A4[1] - bar_height + 5 * mm, (project or "")[:80])
+    c.drawString(margin, A4[1] - HEADER_BAR_HEIGHT + 5 * mm, (project or "")[:80])
 
     c.setFont("Helvetica", 10)
     right_text = f"{site_id} – {site_name}".strip(" –")
-    c.drawRightString(width - margin, A4[1] - bar_height + 5 * mm, right_text)
+    c.drawRightString(width - margin, A4[1] - HEADER_BAR_HEIGHT + 5 * mm, right_text)
 
     c.setFillGray(0.0)
 
