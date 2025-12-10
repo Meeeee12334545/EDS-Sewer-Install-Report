@@ -2,7 +2,10 @@ import hashlib
 import io
 import json
 import math
-from datetime import time, date
+import os
+import base64
+from datetime import time, date, datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -32,6 +35,132 @@ try:
     GEO_AVAILABLE = True
 except ImportError:
     GEO_AVAILABLE = False
+
+
+# ---------- Database functions for storing/loading reports ----------
+REPORTS_DIR = Path(__file__).parent / "data" / "reports"
+
+
+def ensure_reports_directory():
+    """Ensure the reports directory exists."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def sanitize_filename(text):
+    """Sanitize text for use in filenames."""
+    # Replace spaces and special characters
+    import re
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text[:50]  # Limit length
+
+
+def encode_binary_data(site_record):
+    """Encode binary data (photos, diagrams) to base64 for JSON storage."""
+    encoded = site_record.copy()
+    
+    # Encode diagram
+    if encoded.get("diagram") and encoded["diagram"].get("data"):
+        encoded["diagram"] = encoded["diagram"].copy()
+        encoded["diagram"]["data"] = base64.b64encode(
+            encoded["diagram"]["data"]
+        ).decode("utf-8")
+    
+    # Encode photos
+    if encoded.get("photos"):
+        encoded["photos"] = []
+        for photo in site_record["photos"]:
+            photo_copy = photo.copy()
+            if photo_copy.get("data"):
+                photo_copy["data"] = base64.b64encode(photo_copy["data"]).decode("utf-8")
+            encoded["photos"].append(photo_copy)
+    
+    return encoded
+
+
+def decode_binary_data(site_record):
+    """Decode base64 binary data back to bytes."""
+    decoded = site_record.copy()
+    
+    # Decode diagram
+    if decoded.get("diagram") and decoded["diagram"].get("data"):
+        decoded["diagram"] = decoded["diagram"].copy()
+        try:
+            decoded["diagram"]["data"] = base64.b64decode(decoded["diagram"]["data"])
+        except Exception:
+            decoded["diagram"]["data"] = b""
+    
+    # Decode photos
+    if decoded.get("photos"):
+        decoded["photos"] = []
+        for photo in site_record["photos"]:
+            photo_copy = photo.copy()
+            if photo_copy.get("data"):
+                try:
+                    photo_copy["data"] = base64.b64decode(photo_copy["data"])
+                except Exception:
+                    photo_copy["data"] = b""
+            decoded["photos"].append(photo_copy)
+    
+    return decoded
+
+
+def save_report_to_database(site_record):
+    """Save a site report to the database as a JSON file."""
+    ensure_reports_directory()
+    
+    # Generate filename
+    project = sanitize_filename(site_record.get("project_name", "unknown"))
+    site = sanitize_filename(site_record.get("site_name", "unknown"))
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{project}_{site}_{timestamp}.json"
+    filepath = REPORTS_DIR / filename
+    
+    # Encode binary data
+    encoded_record = encode_binary_data(site_record)
+    
+    # Save to JSON
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(encoded_record, f, indent=2, default=str)
+    
+    return filename
+
+
+def load_all_reports():
+    """Load all reports from the database."""
+    ensure_reports_directory()
+    
+    reports = []
+    for filepath in sorted(REPORTS_DIR.glob("*.json"), reverse=True):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Decode binary data
+                decoded = decode_binary_data(data)
+                decoded["_filename"] = filepath.name
+                decoded["_filepath"] = str(filepath)
+                reports.append(decoded)
+        except Exception as e:
+            st.warning(f"Could not load {filepath.name}: {e}")
+    
+    return reports
+
+
+def delete_report_from_database(filename):
+    """Delete a report from the database."""
+    filepath = REPORTS_DIR / filename
+    if filepath.exists():
+        filepath.unlink()
+        return True
+    return False
+
+
+def get_report_summary(report):
+    """Get a summary string for a report."""
+    project = report.get("project_name", "Unknown Project")
+    site = report.get("site_name", "Unknown Site")
+    date_str = report.get("install_date", "Unknown Date")
+    return f"{project} - {site} ({date_str})"
 
 
 # ---------- Canvas with "page x of y" ----------
@@ -2309,7 +2438,7 @@ else:
         key="site_select",
     )
 
-    col_actions1, col_actions2, col_actions3 = st.columns([1, 1, 4])
+    col_actions1, col_actions2, col_actions3, col_actions4 = st.columns([1, 1, 1, 3])
     with col_actions1:
         if st.button("✏️ Load selected for editing"):
             st.session_state["draft_site"] = sites[idx]
@@ -2332,6 +2461,13 @@ else:
             st.session_state["last_geocoded_coords"] = None
             st.success("Site deleted from project.")
             safe_rerun()
+    with col_actions3:
+        if st.button("💾 Save to database"):
+            try:
+                filename = save_report_to_database(sites[idx])
+                st.success(f"Report saved to database: {filename}")
+            except Exception as e:
+                st.error(f"Error saving report: {e}")
 
 # ---------- Export section ----------
 st.subheader("Export")
@@ -2368,3 +2504,183 @@ else:
             mime="application/pdf",
             use_container_width=True,
         )
+
+# ---------- Saved Reports Database Section ----------
+st.markdown("---")
+st.header("📚 Saved Reports Database")
+
+# Load all saved reports
+saved_reports = load_all_reports()
+
+if not saved_reports:
+    st.info(
+        "No reports saved yet. Use the **💾 Save to database** button above "
+        "to save completed reports to the GitHub repository."
+    )
+else:
+    st.success(f"Found {len(saved_reports)} saved report(s) in the database.")
+    
+    # Search and filter
+    col_search1, col_search2, col_search3 = st.columns([2, 1, 1])
+    with col_search1:
+        search_term = st.text_input(
+            "🔍 Search reports (project name, site name, client)",
+            key="search_reports",
+        )
+    with col_search2:
+        sort_by = st.selectbox(
+            "Sort by",
+            ["Date (newest)", "Date (oldest)", "Project", "Site"],
+            key="sort_reports",
+        )
+    with col_search3:
+        st.write("")
+        st.write("")
+        if st.button("🔄 Refresh list"):
+            safe_rerun()
+    
+    # Filter reports based on search
+    filtered_reports = saved_reports
+    if search_term:
+        search_lower = search_term.lower()
+        filtered_reports = [
+            r for r in saved_reports
+            if search_lower in r.get("project_name", "").lower()
+            or search_lower in r.get("site_name", "").lower()
+            or search_lower in r.get("client", "").lower()
+            or search_lower in r.get("site_id", "").lower()
+        ]
+    
+    # Sort reports
+    if sort_by == "Date (oldest)":
+        filtered_reports = list(reversed(filtered_reports))
+    elif sort_by == "Project":
+        filtered_reports = sorted(
+            filtered_reports,
+            key=lambda r: r.get("project_name", "").lower()
+        )
+    elif sort_by == "Site":
+        filtered_reports = sorted(
+            filtered_reports,
+            key=lambda r: r.get("site_name", "").lower()
+        )
+    
+    if not filtered_reports:
+        st.warning(f"No reports found matching '{search_term}'")
+    else:
+        st.caption(f"Showing {len(filtered_reports)} report(s)")
+        
+        # Display reports in an expandable list
+        for i, report in enumerate(filtered_reports):
+            summary = get_report_summary(report)
+            filename = report.get("_filename", "unknown.json")
+            
+            with st.expander(f"📄 {summary}"):
+                col_info1, col_info2, col_info3 = st.columns([2, 2, 2])
+                
+                with col_info1:
+                    st.markdown("**Project Details**")
+                    st.text(f"Project: {report.get('project_name', 'N/A')}")
+                    st.text(f"Client: {report.get('client', 'N/A')}")
+                    st.text(f"Catchment: {report.get('catchment', 'N/A')}")
+                
+                with col_info2:
+                    st.markdown("**Site Details**")
+                    st.text(f"Site: {report.get('site_name', 'N/A')}")
+                    st.text(f"Site ID: {report.get('site_id', 'N/A')}")
+                    st.text(f"Install Date: {report.get('install_date', 'N/A')}")
+                
+                with col_info3:
+                    st.markdown("**Equipment**")
+                    st.text(f"Meter: {report.get('meter_model', 'N/A')}")
+                    st.text(f"Logger: {report.get('logger_serial', 'N/A')}")
+                    st.text(f"Rating: {report.get('calibration_rating', 'N/A')}")
+                
+                # Location
+                if report.get("gps_lat") and report.get("gps_lon"):
+                    st.markdown("**Location**")
+                    st.text(f"GPS: {report.get('gps_lat')}, {report.get('gps_lon')}")
+                    if report.get("site_address"):
+                        st.text(f"Address: {report.get('site_address')}")
+                
+                # Actions
+                st.markdown("---")
+                col_act1, col_act2, col_act3, col_act4 = st.columns(4)
+                
+                with col_act1:
+                    if st.button("📥 Load to form", key=f"load_{filename}"):
+                        # Load this report into the form for editing
+                        st.session_state["draft_site"] = report
+                        st.session_state["edit_index"] = None
+                        st.session_state["gps_lat"] = report.get("gps_lat", "")
+                        st.session_state["gps_lon"] = report.get("gps_lon", "")
+                        st.session_state["auto_address"] = report.get("site_address", "")
+                        st.session_state["site_address"] = report.get("site_address", "")
+                        st.success("Report loaded into form. Scroll up to edit.")
+                        safe_rerun()
+                
+                with col_act2:
+                    # Export single report to PDF
+                    pdf_single = create_pdf_bytes([report])
+                    proj_name = report.get("project_name", "project").replace(" ", "_")
+                    site_name = report.get("site_name", "site").replace(" ", "_")
+                    st.download_button(
+                        "📄 PDF",
+                        data=pdf_single,
+                        file_name=f"{proj_name}_{site_name}_report.pdf",
+                        mime="application/pdf",
+                        key=f"pdf_{filename}",
+                    )
+                
+                with col_act3:
+                    # Export to Excel
+                    excel_single = create_excel_bytes([report])
+                    st.download_button(
+                        "📊 Excel",
+                        data=excel_single,
+                        file_name=f"{proj_name}_{site_name}_data.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"excel_{filename}",
+                    )
+                
+                with col_act4:
+                    if st.button("🗑️ Delete", key=f"delete_{filename}"):
+                        if delete_report_from_database(filename):
+                            st.success(f"Report deleted: {filename}")
+                            safe_rerun()
+                        else:
+                            st.error(f"Failed to delete: {filename}")
+        
+        # Bulk export options
+        st.markdown("---")
+        st.subheader("Bulk Export")
+        col_bulk1, col_bulk2 = st.columns(2)
+        
+        with col_bulk1:
+            # Export all filtered reports to Excel
+            if filtered_reports:
+                excel_all = create_excel_bytes(filtered_reports)
+                st.download_button(
+                    "📊 Export all filtered reports to Excel",
+                    data=excel_all,
+                    file_name="all_saved_reports.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        
+        with col_bulk2:
+            # Export all filtered reports to a combined PDF
+            if filtered_reports:
+                pdf_all = create_pdf_bytes(filtered_reports)
+                st.download_button(
+                    "📄 Export all filtered reports to PDF",
+                    data=pdf_all,
+                    file_name="all_saved_reports.pdf",
+                    mime="application/pdf",
+                )
+
+st.markdown("---")
+st.caption(
+    "💡 **Tip:** All saved reports are stored in the `data/reports/` directory "
+    "and are tracked by Git. This means all your installation reports are versioned "
+    "and backed up in your GitHub repository."
+)
