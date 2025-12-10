@@ -164,7 +164,7 @@ def get_report_summary(report):
     date_str = report.get("install_date", "Unknown Date")
     return f"{project} - {site} ({date_str})"
 # Offset between the header bar and the start of body content on each page
-HEADER_CONTENT_OFFSET = 60 * mm
+HEADER_CONTENT_OFFSET = 15 * mm
 
 
 # ---------- Canvas with "page x of y" ----------
