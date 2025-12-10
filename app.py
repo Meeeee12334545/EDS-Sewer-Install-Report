@@ -1326,6 +1326,46 @@ if st.session_state["gps_lat"]:
 if st.session_state["gps_lon"]:
     draft["gps_lon"] = st.session_state["gps_lon"]
 
+# ---------- Inject JavaScript to prevent Enter key submission ----------
+# Use st.components to inject JavaScript that will execute after the page loads
+import streamlit.components.v1 as components
+
+# Inject JavaScript using a height=0 iframe
+components.html("""
+<script>
+// This script prevents Enter key from submitting the Streamlit form
+(function() {
+    function preventEnter() {
+        const parentWindow = window.parent;
+        if (!parentWindow) return;
+        
+        const parentDoc = parentWindow.document;
+        if (!parentDoc) return;
+        
+        // Add event listener to parent document
+        parentDoc.addEventListener('keydown', function(e) {
+            // If Enter key is pressed in an input field (but not textarea or button)
+            if (e.key === 'Enter' && 
+                e.target && 
+                (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') &&
+                e.target.type !== 'submit' &&
+                e.target.type !== 'button') {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return false;
+            }
+        }, true);
+    }
+    
+    // Try multiple times to ensure it's attached
+    setTimeout(preventEnter, 100);
+    setTimeout(preventEnter, 500);
+    setTimeout(preventEnter, 1000);
+})();
+</script>
+""", height=0)
+
 # ---------- Site form ----------
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
