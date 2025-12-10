@@ -256,7 +256,7 @@ def draw_site_main_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 55 * mm
+    y = height - 28 * mm
 
     # 1. Project details
     draw_section_title(c, "1. Project", margin, y)
@@ -398,7 +398,7 @@ def draw_site_commissioning_page(c, site, width, height):
                 site.get("site_id", ""),
                 site.get("site_name", ""),
             )
-            return height - 55 * mm
+            return height - 28 * mm
         return y_current
 
     draw_header_bar(
@@ -408,7 +408,7 @@ def draw_site_commissioning_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 55 * mm
+    y = height - 28 * mm
 
     # 4. Meter, sensor & configuration
     draw_section_title(c, "4. Meter, Sensor & Configuration", margin, y)
@@ -645,7 +645,7 @@ def draw_site_commissioning_page(c, site, width, height):
         site.get("site_id", ""),
         site.get("site_name", ""),
     )
-    y = height - 55 * mm
+    y = height - 28 * mm
     max_w = width - 2 * margin
     max_diag_h = 70 * mm
     max_map_h = 60 * mm
@@ -696,7 +696,7 @@ def draw_site_commissioning_page(c, site, width, height):
                 site.get("site_id", ""),
                 site.get("site_name", ""),
             )
-            y = height - 55 * mm
+            y = height - 28 * mm
 
         draw_section_title(c, f"{section_idx}. Site location map", margin, y)
         y -= line_height * 1.5
@@ -732,7 +732,7 @@ def draw_site_commissioning_page(c, site, width, height):
             site.get("site_id", ""),
             site.get("site_name", ""),
         )
-        y = height - 55 * mm
+        y = height - 28 * mm
 
     draw_section_title(c, f"{section_idx}. Reporting", margin, y)
     y -= line_height * 1.5
@@ -773,7 +773,7 @@ def draw_site_photos(c, site, photos, width, height):
             site.get("site_id", ""),
             site.get("site_name", ""),
         )
-        y0 = height - 55 * mm
+        y0 = height - 28 * mm
         c.setFont("Helvetica-Bold", 11)
         c.drawString(
             margin,
