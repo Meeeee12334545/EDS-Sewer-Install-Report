@@ -2860,68 +2860,68 @@ st.caption(
     "and backed up in your GitHub repository."
 )
 
-    st.markdown("---")
-    st.subheader("GitHub Storage")
+st.markdown("---")
+st.subheader("GitHub Storage")
 
-    token_env = os.getenv("GITHUB_REPORT_TOKEN") or os.getenv("GITHUB_TOKEN")
-    try:
-        token_secret = (
-            st.secrets.get("github_report_token")
-            if hasattr(st, "secrets")
-            else None
-        )
-    except Exception:
-        token_secret = None
-    github_token = token_secret or token_env
-
-    default_repo = os.getenv("GITHUB_REPORT_REPO", "")
-    default_branch = os.getenv("GITHUB_REPORT_BRANCH", "main")
-    default_folder = os.getenv("GITHUB_REPORT_FOLDER", "reports")
-
-    repo_value = st.text_input(
-        "GitHub repository (owner/name)",
-        value=st.session_state.get("github_repo", default_repo),
-        key="github_repo_input",
-        help="Example: organisation/eds-install-reports",
+token_env = os.getenv("GITHUB_REPORT_TOKEN") or os.getenv("GITHUB_TOKEN")
+try:
+    token_secret = (
+        st.secrets.get("github_report_token")
+        if hasattr(st, "secrets")
+        else None
     )
-    branch_value = st.text_input(
-        "Branch",
-        value=st.session_state.get("github_branch", default_branch),
-        key="github_branch_input",
-    )
-    folder_value = st.text_input(
-        "Destination folder in repository",
-        value=st.session_state.get("github_folder", default_folder),
-        key="github_folder_input",
-        help="Reports are stored as JSON bundles inside this folder.",
-    )
+except Exception:
+    token_secret = None
+github_token = token_secret or token_env
 
-    st.session_state["github_repo"] = repo_value
-    st.session_state["github_branch"] = branch_value
-    st.session_state["github_folder"] = folder_value
+default_repo = os.getenv("GITHUB_REPORT_REPO", "")
+default_branch = os.getenv("GITHUB_REPORT_BRANCH", "main")
+default_folder = os.getenv("GITHUB_REPORT_FOLDER", "reports")
 
-    if not github_token:
-        st.info(
-            "Set a `GITHUB_REPORT_TOKEN` environment variable (or `github_report_token` secret) with repo write access to enable uploads."
-        )
-    elif not repo_value.strip():
-        st.info("Enter the target GitHub repository to enable uploads.")
-    else:
-        if st.button(
-            "⬆️ Upload selected site bundle to GitHub",
-            use_container_width=True,
-            key="github_upload_button",
-        ):
-            try:
-                result = upload_site_report_to_github(
-                    selected_site,
-                    pdf_bytes,
-                    repo_value.strip(),
-                    token=github_token,
-                    branch=branch_value.strip() or "main",
-                    base_folder=folder_value.strip() or "reports",
-                )
-                destination = result.get("html_url") or result.get("path")
-                st.success(f"Report uploaded to GitHub ({destination}).")
-            except Exception as exc:
-                st.error(f"GitHub upload failed: {exc}")
+repo_value = st.text_input(
+    "GitHub repository (owner/name)",
+    value=st.session_state.get("github_repo", default_repo),
+    key="github_repo_input",
+    help="Example: organisation/eds-install-reports",
+)
+branch_value = st.text_input(
+    "Branch",
+    value=st.session_state.get("github_branch", default_branch),
+    key="github_branch_input",
+)
+folder_value = st.text_input(
+    "Destination folder in repository",
+    value=st.session_state.get("github_folder", default_folder),
+    key="github_folder_input",
+    help="Reports are stored as JSON bundles inside this folder.",
+)
+
+st.session_state["github_repo"] = repo_value
+st.session_state["github_branch"] = branch_value
+st.session_state["github_folder"] = folder_value
+
+if not github_token:
+    st.info(
+        "Set a `GITHUB_REPORT_TOKEN` environment variable (or `github_report_token` secret) with repo write access to enable uploads."
+    )
+elif not repo_value.strip():
+    st.info("Enter the target GitHub repository to enable uploads.")
+else:
+    if st.button(
+        "⬆️ Upload selected site bundle to GitHub",
+        use_container_width=True,
+        key="github_upload_button",
+    ):
+        try:
+            result = upload_site_report_to_github(
+                selected_site,
+                pdf_bytes,
+                repo_value.strip(),
+                token=github_token,
+                branch=branch_value.strip() or "main",
+                base_folder=folder_value.strip() or "reports",
+            )
+            destination = result.get("html_url") or result.get("path")
+            st.success(f"Report uploaded to GitHub ({destination}).")
+        except Exception as exc:
+            st.error(f"GitHub upload failed: {exc}")
