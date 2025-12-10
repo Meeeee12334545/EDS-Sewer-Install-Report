@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import math
@@ -864,6 +865,78 @@ def create_pdf_bytes(sites):
         out = io.BytesIO(pdf_bytes)
         out.seek(0)
         return out
+
+
+# ---------- Photo helpers ----------
+def merge_photo_records(existing_photos, new_photos):
+    """Merge existing and newly uploaded photo records without duplication.
+
+    Photos are deduplicated by hashing their binary payload so that renaming an
+    existing image updates its metadata instead of creating a second copy. All
+    outputs have trimmed, non-empty captions and their ``data`` value is
+    normalised to ``bytes`` to keep equality checks reliable.
+    """
+
+    def _ensure_bytes(payload):
+        if isinstance(payload, bytes):
+            return payload
+        if isinstance(payload, bytearray):
+            return bytes(payload)
+        if isinstance(payload, memoryview):
+            return payload.tobytes()
+        return None
+
+    merged_by_hash: dict[str, dict] = {}
+    insertion_order: list[str] = []
+
+    def _store(copy: dict, data_bytes: bytes | None, *, fallback_key: str) -> None:
+        if data_bytes is None:
+            if fallback_key not in merged_by_hash:
+                insertion_order.append(fallback_key)
+            merged_by_hash[fallback_key] = copy
+            return
+
+        digest = hashlib.sha256(data_bytes).hexdigest()
+        if digest not in merged_by_hash:
+            insertion_order.append(digest)
+            merged_by_hash[digest] = copy
+        else:
+            merged_by_hash[digest].update(copy)
+
+    for idx, photo in enumerate(existing_photos or []):
+        if not isinstance(photo, dict):
+            continue
+        copy = photo.copy()
+        copy_name = (copy.get("name") or "").strip()
+        copy["name"] = copy_name or "Site photo"
+        data_bytes = _ensure_bytes(copy.get("data"))
+        if data_bytes is not None:
+            copy["data"] = data_bytes
+        _store(copy, data_bytes, fallback_key=f"existing-{idx}")
+
+    for idx, photo in enumerate(new_photos or []):
+        if not isinstance(photo, dict):
+            continue
+        data_bytes = _ensure_bytes(photo.get("data"))
+        if data_bytes is None:
+            continue
+
+        digest = hashlib.sha256(data_bytes).hexdigest()
+        cleaned_name = (photo.get("name") or "").strip()
+
+        if digest in merged_by_hash:
+            existing = merged_by_hash[digest]
+            if cleaned_name:
+                existing["name"] = cleaned_name
+            if photo.get("mime"):
+                existing["mime"] = photo["mime"]
+        else:
+            copy = photo.copy()
+            copy["data"] = data_bytes
+            copy["name"] = cleaned_name or "Site photo"
+            _store(copy, data_bytes, fallback_key=f"new-{idx}")
+
+    return [merged_by_hash[key] for key in insertion_order]
 
 
 # ---------- Excel export ----------
@@ -2101,7 +2174,7 @@ with st.form("site_form", clear_on_submit=False):
         else:
             diagram_obj = existing_diagram
 
-        all_photos = existing_photos + new_photos
+        all_photos = merge_photo_records(existing_photos, new_photos)
 
         site_record = {
             "project_name": project_name,
