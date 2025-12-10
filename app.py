@@ -383,6 +383,22 @@ def draw_site_main_page(c, site, width, height):
 def draw_site_commissioning_page(c, site, width, height):
     margin = 22 * mm
     line_height = 6 * mm
+    min_y_threshold = 40 * mm  # Minimum Y before forcing page break
+    
+    def check_page_break(y_current, space_needed=10 * mm):
+        """Check if we need a page break and create one if necessary."""
+        if y_current - space_needed < min_y_threshold:
+            draw_footer(c, width, site.get("client", ""), site.get("site_name", ""))
+            c.showPage()
+            draw_header_bar(
+                c,
+                width,
+                site.get("project_name", "Project"),
+                site.get("site_id", ""),
+                site.get("site_name", ""),
+            )
+            return height - 55 * mm
+        return y_current
 
     draw_header_bar(
         c,
@@ -455,6 +471,7 @@ def draw_site_commissioning_page(c, site, width, height):
     y -= line_height * 0.5
 
     # 5. Commissioning checks
+    y = check_page_break(y, space_needed=30 * mm)
     draw_section_title(c, "5. Commissioning Checks", margin, y)
     y -= line_height * 1.5
     depth_line = (
@@ -492,9 +509,12 @@ def draw_site_commissioning_page(c, site, width, height):
     extra = site.get("verification_readings", []) or []
     if extra:
         y -= line_height * 0.5
+        y = check_page_break(y, space_needed=30 * mm)
         draw_section_title(c, "6. Additional Verification Readings", margin, y)
         y -= line_height * 1.5
         for i, r in enumerate(extra):
+            # Check if we need a page break before each reading (each takes ~4 lines)
+            y = check_page_break(y, space_needed=25 * mm)
             y = draw_wrapped_kv(c, f"Test {i + 1}", "", margin, y, line_height)
             depth_txt = (
                 f"Measured {r.get('depth_meas_mm','')} mm / "
@@ -550,6 +570,7 @@ def draw_site_commissioning_page(c, site, width, height):
     )
 
     y -= line_height * 0.5
+    y = check_page_break(y, space_needed=25 * mm)
     draw_section_title(c, "7. Flow (for model calibration)", margin, y)
     y -= line_height * 1.5
     y = draw_wrapped_kv(c, "Flow (manual)", flow_meas_line, margin, y, line_height)
@@ -558,6 +579,7 @@ def draw_site_commissioning_page(c, site, width, height):
     y -= line_height * 0.5
 
     # Calibration suitability & notes
+    y = check_page_break(y, space_needed=35 * mm)
     draw_section_title(c, "8. Calibration Suitability & Modelling Notes", margin, y)
     y -= line_height * 1.5
     y = draw_wrapped_kv(
@@ -603,6 +625,7 @@ def draw_site_commissioning_page(c, site, width, height):
         checklist_flags.append("Comms/data visible on platform")
 
     chk_text = "; ".join(checklist_flags) if checklist_flags else "Not recorded"
+    y = check_page_break(y, space_needed=15 * mm)
     y = draw_wrapped_kv(
         c, "Installer checklist", chk_text, margin, y, line_height, width_label=40 * mm
     )
