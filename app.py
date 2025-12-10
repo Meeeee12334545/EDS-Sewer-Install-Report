@@ -7,6 +7,7 @@ from datetime import time, date
 import pandas as pd
 import streamlit as st
 import time as _time
+from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -159,16 +160,18 @@ def create_site_map_bytes(lat_str, lon_str, zoom=19, width_px=600, height_px=400
 def draw_header_bar(c, width, project, site_id, site_name):
     margin = 20 * mm
     bar_height = 18 * mm
-    c.setFillGray(0.9)
+    c.setFillColor(HexColor("#3d9991"))
     c.rect(0, A4[1] - bar_height, width, bar_height, fill=1, stroke=0)
 
-    c.setFillGray(0.0)
+    c.setFillColor(HexColor("#FFFFFF"))
     c.setFont("Helvetica-Bold", 12)
     c.drawString(margin, A4[1] - bar_height + 5 * mm, (project or "")[:80])
 
     c.setFont("Helvetica", 10)
     right_text = f"{site_id} – {site_name}".strip(" –")
     c.drawRightString(width - margin, A4[1] - bar_height + 5 * mm, right_text)
+
+    c.setFillGray(0.0)
 
 
 def draw_footer(c, width, client, site_name):
