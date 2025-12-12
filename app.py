@@ -223,6 +223,12 @@ def load_report_into_form(report: dict, *, edit_index=None, success_message: Opt
         st.session_state["_flash_message"] = success_message
     
     safe_rerun()
+    def _extra_readings_slider_changed():
+        st.session_state["extra_readings_count"] = int(
+            st.session_state.get("extra_readings_count_slider", 0)
+        )
+        st.session_state["_extra_count_seed"] = id(st.session_state.get("draft_site"))
+        safe_rerun()
 
 
 def delete_report_from_database(filename):
@@ -2036,21 +2042,12 @@ metric_html = f"""
 """
 st.markdown(metric_html, unsafe_allow_html=True)
 
-extra_count_seed = len(draft.get("verification_readings", []) or [])
-extra_count_default = int(st.session_state.get("extra_readings_count", extra_count_seed))
-slider_max = max(10, extra_count_default)
-extra_count_slider = st.slider(
-    "Number of additional verification readings",
-    min_value=0,
-    max_value=slider_max,
-    value=min(extra_count_default, slider_max),
-    key="extra_readings_count_control",
-    help="Slide to add or remove verification reading cards before filling in the details below.",
-)
-st.session_state["extra_readings_count"] = int(extra_count_slider)
-st.caption(
-    "Adjust the slider above before completing the Additional verification readings section in the form."
-)
+
+def _extra_readings_slider_changed():
+    slider_val = int(st.session_state.get("extra_readings_count_slider", 0))
+    st.session_state["extra_readings_count"] = slider_val
+    st.session_state["_extra_count_seed"] = id(st.session_state.get("draft_site"))
+    safe_rerun()
 
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
@@ -2557,6 +2554,31 @@ with st.form("site_form", clear_on_submit=False):
             value=draft.get("zero_depth_check_notes", ""),
         )
 
+        extra_readings = draft.get("verification_readings", []) or []
+        extra_seed = len(extra_readings)
+        extra_default = int(
+            st.session_state.get("extra_readings_count", extra_seed)
+        )
+        slider_max = max(10, extra_seed, extra_default)
+        slider_value = st.slider(
+            "Number of additional verification readings",
+            min_value=0,
+            max_value=slider_max,
+            value=min(extra_default, slider_max),
+            key="extra_readings_count_slider",
+            help="Adjust to add or remove verification reading cards for depth and velocity checks.",
+            on_change=_extra_readings_slider_changed,
+        )
+        if st.session_state.get("extra_readings_count") != int(slider_value):
+            st.session_state["extra_readings_count"] = int(slider_value)
+            st.session_state["_extra_count_seed"] = id(
+                st.session_state.get("draft_site")
+            )
+
+        extra_count = int(
+            st.session_state.get("extra_readings_count", int(slider_value))
+        )
+
         rc1, rc2, rc3 = st.columns(3)
         with rc1:
             reference_device_type = st.text_input(
@@ -2575,12 +2597,8 @@ with st.form("site_form", clear_on_submit=False):
             )
 
         st.markdown("#### Additional verification readings")
-        extra_readings = draft.get("verification_readings", []) or []
-        extra_count = int(
-            st.session_state.get("extra_readings_count", len(extra_readings))
-        )
         st.caption(
-            f"Configured for {extra_count} additional reading(s). Adjust the slider above this form to set the count, then complete each card."
+            f"Configured for {extra_count} additional reading(s). Adjust the slider above to set the count, then complete each card."
         )
 
         updated_extra = []
