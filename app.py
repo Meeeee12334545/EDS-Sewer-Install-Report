@@ -216,6 +216,8 @@ def load_report_into_form(report: dict, *, edit_index=None, success_message: Opt
     st.session_state["gps_lon"] = draft_copy.get("gps_lon", "")
     st.session_state["auto_address"] = draft_copy.get("site_address", "")
     st.session_state["site_address"] = draft_copy.get("site_address", "")
+    st.session_state["extra_readings_count"] = len(draft_copy.get("verification_readings", []) or [])
+    st.session_state['_extra_count_seed'] = id(st.session_state.get('draft_site'))
 
     if success_message:
         st.session_state["_flash_message"] = success_message
@@ -1384,6 +1386,14 @@ def create_excel_bytes(sites):
 # ---------- Streamlit helpers ----------
 def safe_rerun():
     """Try to rerun the Streamlit app in a safe, backwards-compatible way."""
+    rerun_fn = getattr(st, "rerun", None)
+    if callable(rerun_fn):
+        try:
+            rerun_fn()
+            return
+        except Exception:
+            pass
+
     if hasattr(st, "experimental_rerun"):
         try:
             st.experimental_rerun()
@@ -1392,9 +1402,9 @@ def safe_rerun():
             pass
 
     try:
-        from streamlit.runtime.scriptrunner.script_runner import RerunException
+        from streamlit.runtime.scriptrunner import script_runner
 
-        raise RerunException()
+        raise script_runner.RerunException(script_runner.RerunData(None))
     except Exception:
         st.session_state["_force_rerun_toggle"] = not st.session_state.get(
             "_force_rerun_toggle", False
@@ -1779,6 +1789,12 @@ sites = st.session_state["sites"]
 draft = st.session_state["draft_site"] or {}
 edit_index = st.session_state["edit_index"]
 
+current_draft_seed = id(st.session_state.get("draft_site"))
+if st.session_state.get("_extra_count_seed") != current_draft_seed:
+    st.session_state["extra_readings_count"] = len(draft.get("verification_readings", []) or [])
+    st.session_state["_extra_count_seed"] = current_draft_seed
+
+
 flash_message = st.session_state.pop("_flash_message", None)
 if flash_message:
     st.success(flash_message)
@@ -2011,6 +2027,17 @@ metric_html = f"""
 """
 st.markdown(metric_html, unsafe_allow_html=True)
 
+extra_readings_display = st.number_input(
+    "Number of additional verification readings",
+    min_value=0,
+    max_value=10,
+    step=1,
+    value=int(st.session_state.get("extra_readings_count", 0)),
+    key="extra_readings_count_widget",
+    help="Adjust before filling in the additional verification readings below.",
+)
+st.session_state["extra_readings_count"] = int(extra_readings_display)
+
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
         st.info(
@@ -2020,25 +2047,27 @@ with st.form("site_form", clear_on_submit=False):
         )
 
     (
-        tab_project,
-        tab_site,
+        tab_identify,
+        tab_access,
+        tab_hydraulics,
         tab_equipment,
         tab_commissioning,
         tab_media,
         tab_signoff,
     ) = st.tabs(
         [
-            "1 ▸ Project & Client",
-            "2 ▸ Site & Safety",
-            "3 ▸ Equipment & Telemetry",
-            "4 ▸ Commissioning & QA",
-            "5 ▸ Media & Attachments",
-            "6 ▸ Reporting & Sign-off",
+            "1 ▸ Site identification",
+            "2 ▸ Access & safety",
+            "3 ▸ Pipe & hydraulics",
+            "4 ▸ Meter & telemetry",
+            "5 ▸ Commissioning & QA",
+            "6 ▸ Media & attachments",
+            "7 ▸ Reporting & sign-off",
         ]
     )
 
-    with tab_project:
-        st.markdown("#### Project overview")
+    with tab_identify:
+        st.markdown("#### Site & project reference")
         c1, c2, c3 = st.columns([1.2, 1.2, 0.8])
         with c1:
             project_name = st.text_input(
@@ -2093,12 +2122,7 @@ with st.form("site_form", clear_on_submit=False):
                 value=install_time_default,
             )
 
-        st.caption(
-            "Capture the project anchor details before you head down the pit."
-        )
-
-    with tab_site:
-        st.markdown("#### Location, access & safety")
+        st.markdown("#### Location details")
         c_gps1, c_gps2, c_gps3 = st.columns([1, 1, 2])
         with c_gps1:
             gps_lat = st.text_input(
@@ -2130,6 +2154,12 @@ with st.form("site_form", clear_on_submit=False):
         )
         st.session_state["site_address"] = site_address
 
+        st.caption(
+            "Confirm the job card, GPS and address before moving on to physical access."
+        )
+
+    with tab_access:
+        st.markdown("#### Access & permits")
         c_acc1, c_acc2, c_acc3 = st.columns([1, 1, 2])
         with c_acc1:
             access_options = [
@@ -2169,11 +2199,11 @@ with st.form("site_form", clear_on_submit=False):
         )
 
         st.caption(
-            "Use this tab to capture every safety permission before the crew cracks the lid."
+            "Capture traffic, confined space and any other permits before opening the manhole."
         )
 
-    with tab_equipment:
-        st.markdown("#### Pipe & hydraulics envelope")
+    with tab_hydraulics:
+        st.markdown("#### Pipe geometry & hydraulics")
         ph1, ph2, ph3, ph4 = st.columns([1, 1, 1, 1])
         with ph1:
             pipe_diameter_mm = st.number_input(
@@ -2296,7 +2326,10 @@ with st.form("site_form", clear_on_submit=False):
                 value=draft.get("hydraulic_notes", ""),
             )
 
-        st.markdown("#### Meter, telemetry & configuration")
+        st.caption("Measure the pipe and hydraulic context before mounting equipment.")
+
+    with tab_equipment:
+        st.markdown("#### Meter selection & positioning")
         m1, m2, m3 = st.columns(3)
         with m1:
             meter_model_opts = [
@@ -2352,6 +2385,7 @@ with st.form("site_form", clear_on_submit=False):
             value=draft.get("datum_reference_desc", ""),
         )
 
+        st.markdown("#### Telemetry & configuration")
         r1, r2, r3, r4 = st.columns(4)
         with r1:
             level_range_min_mm = st.number_input(
@@ -2442,6 +2476,8 @@ with st.form("site_form", clear_on_submit=False):
             value=draft.get("telemetry_notes", ""),
         )
 
+        st.caption("Capture equipment setup before you move into commissioning checks.")
+
     with tab_commissioning:
         st.markdown("#### Commissioning checks – primary")
         cc1, cc2, cc3 = st.columns(3)
@@ -2526,11 +2562,9 @@ with st.form("site_form", clear_on_submit=False):
 
         st.markdown("#### Additional verification readings")
         extra_readings = draft.get("verification_readings", []) or []
-        extra_count = st.number_input(
-            "Number of additional readings",
-            min_value=0,
-            max_value=10,
-            value=len(extra_readings),
+        extra_count = int(st.session_state.get("extra_readings_count", len(extra_readings)))
+        st.caption(
+            f"Configured for {extra_count} additional reading(s). Adjust the count above before entering details."
         )
 
         updated_extra = []
@@ -2963,6 +2997,8 @@ with st.form("site_form", clear_on_submit=False):
             st.success("Site updated.")
 
         st.session_state["draft_site"] = site_record
+        st.session_state["extra_readings_count"] = len(updated_extra)
+        st.session_state["_extra_count_seed"] = id(st.session_state.get("draft_site"))
         st.session_state["edit_index"] = None
 
 # ---------- Current sites / edit / delete ----------
@@ -3066,6 +3102,41 @@ if not saved_reports:
     )
 else:
     st.success(f"Found {len(saved_reports)} saved report(s) in the database.")
+
+    st.markdown("#### Quick select from database")
+    quick_options = [
+        f"{i+1}. {report.get('project_name', 'Unknown Project')} – "
+        f"{report.get('site_name', 'Unknown Site')} ({report.get('install_date', 'Unknown Date')})"
+        for i, report in enumerate(saved_reports)
+    ]
+
+    quick_col_select, quick_col_action = st.columns([3, 1])
+    with quick_col_select:
+        quick_idx = st.selectbox(
+            "Select a saved report",
+            options=range(len(saved_reports)),
+            format_func=lambda i: quick_options[i],
+            key="saved_report_quick_select",
+        )
+
+    selected_quick_report = saved_reports[quick_idx]
+    selected_quick_filename = selected_quick_report.get("_filename", "unknown.json")
+
+    with quick_col_action:
+        load_label = "📥 Load selected"
+        if st.button(load_label, key="saved_report_quick_load"):
+            site_name = selected_quick_report.get("site_name", "")
+            load_report_into_form(
+                selected_quick_report,
+                edit_index=None,
+                success_message=(
+                    f"Loaded saved report '{site_name}' into the form."
+                    if site_name
+                    else "Loaded saved report into the form."
+                ),
+            )
+
+    st.caption(f"Filename: {selected_quick_filename}")
     
     # Search and filter
     col_search1, col_search2, col_search3 = st.columns([2, 1, 1])
