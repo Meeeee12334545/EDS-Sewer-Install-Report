@@ -1491,7 +1491,7 @@ def parse_pdf_report(file_bytes: bytes) -> dict:
 
 # ---------- Streamlit UI ----------
 st.set_page_config(
-    page_title="Sewer Flow Meter Installation Reporter",
+    page_title="EDS Sewer Install Wizzard",
     layout="wide",
 )
 
@@ -1501,6 +1501,7 @@ EDS_ACCENT = "#E57A00"
 EDS_LIGHT_BG = "#f5f7fb"
 EDS_CARD_BG = "#ffffff"
 EDS_BORDER = "#d9e2ef"
+APPLE_FONT_STACK = '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif'
 
 # Global styling (simplified, readable)
 st.markdown(
@@ -1509,7 +1510,7 @@ st.markdown(
 html, body, [data-testid="stAppViewContainer"], .stApp {{
     background-color: {EDS_LIGHT_BG} !important;
     color: #111827 !important;
-    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 .block-container {{
@@ -1530,13 +1531,14 @@ div[data-testid="stForm"] {{
 
 h1, h2, h3, h4, h5, h6 {{
     color: {EDS_PRIMARY};
-    font-family: Eurostile, "Helvetica Neue", Arial, sans-serif !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 label, [data-testid="stWidgetLabel"] p {{
     color: #111827 !important;
     font-weight: 500;
     font-size: 0.9rem;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 input, textarea, select {{
@@ -1545,6 +1547,7 @@ input, textarea, select {{
     border-radius: 4px !important;
     border: 1px solid #d1d5db !important;
     font-size: 0.95rem !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 textarea {{
@@ -1564,6 +1567,7 @@ button,
     border: none !important;
     padding: 0.45rem 1.0rem !important;
     font-weight: 600 !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 .stButton>button:hover,
@@ -1587,6 +1591,7 @@ div[data-testid="stSelectbox"] div[role="combobox"] {{
     padding: 0.5rem 0.75rem !important;
     font-weight: 500 !important;
     font-size: 0.95rem !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 div[data-testid="stSelectbox"] div[role="combobox"] span {{
@@ -1607,6 +1612,7 @@ div[data-testid="stSelectbox"] ul li {{
     padding: 0.5rem 0.75rem !important;
     font-weight: 400 !important;
     font-size: 0.9rem !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 div[data-testid="stSelectbox"] ul li:hover {{
@@ -1680,6 +1686,7 @@ button:focus {{
     border-radius: 12px;
     border: 1px solid rgba(15, 23, 42, 0.08);
     min-width: 180px;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 .metric-pill strong {{
@@ -1702,6 +1709,7 @@ button:focus {{
     border: 1px solid {EDS_BORDER};
     box-shadow: 0 3px 9px rgba(15, 23, 42, 0.08);
     margin-bottom: 1.5rem;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 .progress-wrapper .progress-label {{
@@ -1743,6 +1751,7 @@ button:focus {{
     background: rgba(0, 80, 122, 0.08) !important;
     color: {EDS_PRIMARY} !important;
     border: 1px solid rgba(0, 80, 122, 0.2) !important;
+    font-family: {APPLE_FONT_STACK} !important;
 }}
 
 .quick-actions button:hover {{
@@ -1772,9 +1781,9 @@ button:focus {{
     unsafe_allow_html=True,
 )
 
-st.title("EDS Sewer Flow Meter Installation Report")
+st.title("EDS Sewer Install Wizzard")
 st.caption(
-    "Standardised EDS installation reports for sewer flow modelling and inflow/infiltration studies."
+    "A polished field companion for capturing EDS sewer meter installations with confidence."
 )
 
 # ---------- Session state ----------
@@ -3110,7 +3119,7 @@ else:
         for i, report in enumerate(saved_reports)
     ]
 
-    quick_col_select, quick_col_action = st.columns([3, 1])
+    quick_col_select, quick_col_load, quick_col_delete = st.columns([3, 1, 1])
     with quick_col_select:
         quick_idx = st.selectbox(
             "Select a saved report",
@@ -3122,9 +3131,8 @@ else:
     selected_quick_report = saved_reports[quick_idx]
     selected_quick_filename = selected_quick_report.get("_filename", "unknown.json")
 
-    with quick_col_action:
-        load_label = "📥 Load selected"
-        if st.button(load_label, key="saved_report_quick_load"):
+    with quick_col_load:
+        if st.button("📥 Load selected", key="saved_report_quick_load"):
             site_name = selected_quick_report.get("site_name", "")
             load_report_into_form(
                 selected_quick_report,
@@ -3135,6 +3143,14 @@ else:
                     else "Loaded saved report into the form."
                 ),
             )
+
+    with quick_col_delete:
+        if st.button("🗑️ Delete selected", key="saved_report_quick_delete"):
+            if delete_report_from_database(selected_quick_filename):
+                st.session_state["_flash_message"] = f"Report deleted: {selected_quick_filename}"
+                safe_rerun()
+            else:
+                st.error(f"Failed to delete: {selected_quick_filename}")
 
     st.caption(f"Filename: {selected_quick_filename}")
     
