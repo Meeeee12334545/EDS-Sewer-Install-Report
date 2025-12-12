@@ -2036,17 +2036,6 @@ metric_html = f"""
 """
 st.markdown(metric_html, unsafe_allow_html=True)
 
-extra_readings_display = st.number_input(
-    "Number of additional verification readings",
-    min_value=0,
-    max_value=10,
-    step=1,
-    value=int(st.session_state.get("extra_readings_count", 0)),
-    key="extra_readings_count_widget",
-    help="Adjust before filling in the additional verification readings below.",
-)
-st.session_state["extra_readings_count"] = int(extra_readings_display)
-
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
         st.info(
@@ -2571,9 +2560,20 @@ with st.form("site_form", clear_on_submit=False):
 
         st.markdown("#### Additional verification readings")
         extra_readings = draft.get("verification_readings", []) or []
-        extra_count = int(st.session_state.get("extra_readings_count", len(extra_readings)))
+        extra_count_default = int(
+            st.session_state.get("extra_readings_count", len(extra_readings))
+        )
+        extra_count = st.slider(
+            "Number of additional verification readings",
+            min_value=0,
+            max_value=10,
+            value=extra_count_default,
+            key="extra_readings_count_control",
+            help="Slide to add or remove verification reading cards without triggering a form submit.",
+        )
+        st.session_state["extra_readings_count"] = int(extra_count)
         st.caption(
-            f"Configured for {extra_count} additional reading(s). Adjust the count above before entering details."
+            f"Configured for {extra_count} additional reading(s). Use the slider above to set the count, then complete each card."
         )
 
         updated_extra = []
