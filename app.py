@@ -2036,6 +2036,22 @@ metric_html = f"""
 """
 st.markdown(metric_html, unsafe_allow_html=True)
 
+extra_count_seed = len(draft.get("verification_readings", []) or [])
+extra_count_default = int(st.session_state.get("extra_readings_count", extra_count_seed))
+slider_max = max(10, extra_count_default)
+extra_count_slider = st.slider(
+    "Number of additional verification readings",
+    min_value=0,
+    max_value=slider_max,
+    value=min(extra_count_default, slider_max),
+    key="extra_readings_count_control",
+    help="Slide to add or remove verification reading cards before filling in the details below.",
+)
+st.session_state["extra_readings_count"] = int(extra_count_slider)
+st.caption(
+    "Adjust the slider above before completing the Additional verification readings section in the form."
+)
+
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
         st.info(
@@ -2560,20 +2576,11 @@ with st.form("site_form", clear_on_submit=False):
 
         st.markdown("#### Additional verification readings")
         extra_readings = draft.get("verification_readings", []) or []
-        extra_count_default = int(
+        extra_count = int(
             st.session_state.get("extra_readings_count", len(extra_readings))
         )
-        extra_count = st.slider(
-            "Number of additional verification readings",
-            min_value=0,
-            max_value=10,
-            value=extra_count_default,
-            key="extra_readings_count_control",
-            help="Slide to add or remove verification reading cards without triggering a form submit.",
-        )
-        st.session_state["extra_readings_count"] = int(extra_count)
         st.caption(
-            f"Configured for {extra_count} additional reading(s). Use the slider above to set the count, then complete each card."
+            f"Configured for {extra_count} additional reading(s). Adjust the slider above this form to set the count, then complete each card."
         )
 
         updated_extra = []
