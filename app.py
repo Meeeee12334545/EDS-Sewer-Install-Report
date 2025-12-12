@@ -221,14 +221,8 @@ def load_report_into_form(report: dict, *, edit_index=None, success_message: Opt
 
     if success_message:
         st.session_state["_flash_message"] = success_message
-    
+
     safe_rerun()
-    def _extra_readings_slider_changed():
-        st.session_state["extra_readings_count"] = int(
-            st.session_state.get("extra_readings_count_slider", 0)
-        )
-        st.session_state["_extra_count_seed"] = id(st.session_state.get("draft_site"))
-        safe_rerun()
 
 
 def delete_report_from_database(filename):
@@ -2042,13 +2036,6 @@ metric_html = f"""
 """
 st.markdown(metric_html, unsafe_allow_html=True)
 
-
-def _extra_readings_slider_changed():
-    slider_val = int(st.session_state.get("extra_readings_count_slider", 0))
-    st.session_state["extra_readings_count"] = slider_val
-    st.session_state["_extra_count_seed"] = id(st.session_state.get("draft_site"))
-    safe_rerun()
-
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
         st.info(
@@ -2567,13 +2554,13 @@ with st.form("site_form", clear_on_submit=False):
             value=min(extra_default, slider_max),
             key="extra_readings_count_slider",
             help="Adjust to add or remove verification reading cards for depth and velocity checks.",
-            on_change=_extra_readings_slider_changed,
         )
         if st.session_state.get("extra_readings_count") != int(slider_value):
             st.session_state["extra_readings_count"] = int(slider_value)
             st.session_state["_extra_count_seed"] = id(
                 st.session_state.get("draft_site")
             )
+            safe_rerun()
 
         extra_count = int(
             st.session_state.get("extra_readings_count", int(slider_value))
