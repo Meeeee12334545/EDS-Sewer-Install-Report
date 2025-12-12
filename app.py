@@ -126,6 +126,19 @@ def decode_binary_data(site_record):
     return decoded
 
 
+def is_field_filled(value) -> bool:
+    """Utility used by UI progress indicators to gauge completion."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() != ""
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) > 0
+    if isinstance(value, (int, float)):
+        return value not in (0, 0.0)
+    return True
+
+
 def save_report_to_database(site_record):
     """Save a site report to the database as a JSON file."""
     ensure_reports_directory()
@@ -1474,6 +1487,7 @@ st.set_page_config(
 
 EDS_PRIMARY = "#00507A"
 EDS_SECONDARY = "#007A7A"
+EDS_ACCENT = "#E57A00"
 EDS_LIGHT_BG = "#f5f7fb"
 EDS_CARD_BG = "#ffffff"
 EDS_BORDER = "#d9e2ef"
@@ -1499,6 +1513,9 @@ div[data-testid="stForm"] {{
     border-radius: 8px;
     border: 1px solid {EDS_BORDER};
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    max-width: 1350px;
+    margin-left: auto;
+    margin-right: auto;
 }}
 
 h1, h2, h3, h4, h5, h6 {{
@@ -1517,6 +1534,11 @@ input, textarea, select {{
     color: #111827 !important;
     border-radius: 4px !important;
     border: 1px solid #d1d5db !important;
+    font-size: 0.95rem !important;
+}}
+
+textarea {{
+    min-height: 110px !important;
 }}
 
 input::placeholder, textarea::placeholder {{
@@ -1597,6 +1619,143 @@ button:focus {{
     outline: none !important;
     border-color: #2563eb !important;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+}}
+
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 0.25rem;
+    border-bottom: 1px solid {EDS_BORDER};
+    padding-bottom: 0.5rem;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    background-color: rgba(255, 255, 255, 0.8);
+    color: #1f2937;
+    padding: 0.65rem 1.1rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+}}
+
+.stTabs [data-baseweb="tab"]:hover {{
+    border-color: {EDS_PRIMARY};
+    color: {EDS_PRIMARY};
+}}
+
+.stTabs [aria-selected="true"] {{
+    background: linear-gradient(135deg, {EDS_PRIMARY}, {EDS_SECONDARY});
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(0, 80, 122, 0.25);
+}}
+
+.section-card {{
+    background: #ffffff;
+    border: 1px solid {EDS_BORDER};
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 3px 10px rgba(17, 24, 39, 0.08);
+}}
+
+.metrics-band {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}}
+
+.metric-pill {{
+    background: linear-gradient(135deg, rgba(0, 80, 122, 0.12), rgba(0, 122, 122, 0.12));
+    color: #0f172a;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    min-width: 180px;
+}}
+
+.metric-pill strong {{
+    display: block;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+}}
+
+.metric-pill span {{
+    font-size: 1.05rem;
+    font-weight: 700;
+}}
+
+.progress-wrapper {{
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    border: 1px solid {EDS_BORDER};
+    box-shadow: 0 3px 9px rgba(15, 23, 42, 0.08);
+    margin-bottom: 1.5rem;
+}}
+
+.progress-wrapper .progress-label {{
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: #0f172a;
+}}
+
+.progress-track {{
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(0, 80, 122, 0.1);
+    overflow: hidden;
+}}
+
+.progress-value {{
+    height: 100%;
+    background: linear-gradient(135deg, {EDS_PRIMARY}, {EDS_ACCENT});
+    border-radius: 999px;
+}}
+
+.progress-meta {{
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    color: #475569;
+}}
+
+.quick-actions {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 1rem 0;
+}}
+
+.quick-actions button {{
+    background: rgba(0, 80, 122, 0.08) !important;
+    color: {EDS_PRIMARY} !important;
+    border: 1px solid rgba(0, 80, 122, 0.2) !important;
+}}
+
+.quick-actions button:hover {{
+    background: rgba(0, 80, 122, 0.16) !important;
+}}
+
+.stAlert {{
+    border-radius: 10px !important;
+    border: 1px solid rgba(15, 23, 42, 0.1) !important;
+}}
+
+.photo-preview-grid {{
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}}
+
+.photo-preview-card {{
+    background: #ffffff;
+    border: 1px solid {EDS_BORDER};
+    border-radius: 10px;
+    padding: 0.75rem;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
 }}
 </style>
 """,
@@ -1795,7 +1954,63 @@ if st.session_state["gps_lat"]:
 if st.session_state["gps_lon"]:
     draft["gps_lon"] = st.session_state["gps_lon"]
 
-# ---------- Site form ----------
+# ---------- Progress snapshot & metrics ----------
+progress_map = [
+    ("Project name", "project_name"),
+    ("Client", "client"),
+    ("Site / manhole name", "site_name"),
+    ("Site ID", "site_id"),
+    ("Install date", "install_date"),
+    ("Install time", "install_time"),
+    ("gps_lat_input", "gps_lat"),
+    ("gps_lon_input", "gps_lon"),
+    ("Location description (nearby road, property & landmarks)", "manhole_location_desc"),
+    ("site_address_input", "site_address"),
+    ("Pipe diameter (mm)", "pipe_diameter_mm"),
+    ("Meter model", "meter_model"),
+    ("Logging interval (minutes)", "logging_interval_min"),
+    ("Comms method", "comms_method"),
+    ("Prepared by", "prepared_by"),
+    ("Overall rating", "calibration_rating"),
+]
+
+progress_values = {}
+for widget_key, draft_key in progress_map:
+    widget_val = st.session_state.get(widget_key)
+    progress_values[widget_key] = (
+        widget_val if widget_val is not None else draft.get(draft_key)
+    )
+
+filled_count = sum(1 for value in progress_values.values() if is_field_filled(value))
+total_count = len(progress_values)
+progress_pct = int(round((filled_count / total_count) * 100)) if total_count else 0
+progress_pct = max(progress_pct, 4 if filled_count else 0)
+
+st.markdown(
+    f"""
+<div class="progress-wrapper">
+    <div class="progress-label">Onsite completion progress</div>
+    <div class="progress-track">
+        <div class="progress-value" style="width: {progress_pct}%"></div>
+    </div>
+    <div class="progress-meta">
+        <span>{filled_count} of {total_count} checkpoints filled</span>
+        <span>{progress_pct}% complete</span>
+    </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+metric_html = f"""
+<div class="metrics-band">
+    <div class="metric-pill"><strong>Sites this session</strong><span>{len(sites)}</span></div>
+    <div class="metric-pill"><strong>Draft photos</strong><span>{len(draft.get('photos', []) or [])}</span></div>
+    <div class="metric-pill"><strong>Verification readings</strong><span>{len(draft.get('verification_readings', []) or [])}</span></div>
+</div>
+"""
+st.markdown(metric_html, unsafe_allow_html=True)
+
 with st.form("site_form", clear_on_submit=False):
     if edit_index is not None and 0 <= edit_index < len(sites):
         st.info(
@@ -1804,761 +2019,794 @@ with st.form("site_form", clear_on_submit=False):
             "Update fields and click **Update site in current project**."
         )
 
-    st.subheader("Project")
+    (
+        tab_project,
+        tab_site,
+        tab_equipment,
+        tab_commissioning,
+        tab_media,
+        tab_signoff,
+    ) = st.tabs(
+        [
+            "1 ▸ Project & Client",
+            "2 ▸ Site & Safety",
+            "3 ▸ Equipment & Telemetry",
+            "4 ▸ Commissioning & QA",
+            "5 ▸ Media & Attachments",
+            "6 ▸ Reporting & Sign-off",
+        ]
+    )
 
-    c1, c2, c3 = st.columns([1.2, 1.2, 0.8])
-    with c1:
-        project_name = st.text_input(
-            "Project name",
-            value=draft.get("project_name", ""),
-        )
-        client = st.text_input("Client", value=draft.get("client", ""))
-        catchment = st.text_input("Catchment / area", value=draft.get("catchment", ""))
-    with c2:
-        site_name = st.text_input("Site / manhole name", value=draft.get("site_name", ""))
-        site_id = st.text_input("Site ID", value=draft.get("site_id", ""))
-        client_asset_id = st.text_input(
-            "Client asset ID", value=draft.get("client_asset_id", "")
-        )
-    with c3:
-        gis_id = st.text_input("GIS ID", value=draft.get("gis_id", ""))
+    with tab_project:
+        st.markdown("#### Project overview")
+        c1, c2, c3 = st.columns([1.2, 1.2, 0.8])
+        with c1:
+            project_name = st.text_input(
+                "Project name",
+                value=draft.get("project_name", ""),
+            )
+            client = st.text_input("Client", value=draft.get("client", ""))
+            catchment = st.text_input(
+                "Catchment / area", value=draft.get("catchment", "")
+            )
+        with c2:
+            site_name = st.text_input(
+                "Site / manhole name", value=draft.get("site_name", "")
+            )
+            site_id = st.text_input("Site ID", value=draft.get("site_id", ""))
+            client_asset_id = st.text_input(
+                "Client asset ID", value=draft.get("client_asset_id", "")
+            )
+        with c3:
+            gis_id = st.text_input("GIS ID", value=draft.get("gis_id", ""))
 
-        install_date_default = draft.get("install_date")
-        if isinstance(install_date_default, str):
-            try:
-                install_date_default = date.fromisoformat(install_date_default)
-            except ValueError:
+            install_date_default = draft.get("install_date")
+            if isinstance(install_date_default, str):
+                try:
+                    install_date_default = date.fromisoformat(install_date_default)
+                except ValueError:
+                    install_date_default = date.today()
+            elif isinstance(install_date_default, date):
+                pass
+            else:
                 install_date_default = date.today()
-        elif isinstance(install_date_default, date):
-            pass
-        else:
-            install_date_default = date.today()
 
-        install_date = st.date_input(
-            "Install date",
-            value=install_date_default,
-        )
+            install_date = st.date_input(
+                "Install date",
+                value=install_date_default,
+            )
 
-        install_time_default = draft.get("install_time")
-        if isinstance(install_time_default, str):
-            try:
-                h, m = map(int, install_time_default.split(":"))
-                install_time_default = time(h, m)
-            except Exception:
+            install_time_default = draft.get("install_time")
+            if isinstance(install_time_default, str):
+                try:
+                    h, m = map(int, install_time_default.split(":"))
+                    install_time_default = time(h, m)
+                except Exception:
+                    install_time_default = time(9, 0)
+            elif isinstance(install_time_default, time):
+                pass
+            else:
                 install_time_default = time(9, 0)
-        elif isinstance(install_time_default, time):
-            pass
-        else:
-            install_time_default = time(9, 0)
 
-        install_time = st.time_input(
-            "Install time",
-            value=install_time_default,
-        )
-
-    st.markdown("---")
-
-    st.subheader("Location, Access & Safety")
-
-    c_gps1, c_gps2, c_gps3 = st.columns([1, 1, 2])
-    with c_gps1:
-        gps_lat = st.text_input(
-            "GPS latitude",
-            value=st.session_state["gps_lat"],
-            key="gps_lat_input",
-        )
-    with c_gps2:
-        gps_lon = st.text_input(
-            "GPS longitude",
-            value=st.session_state["gps_lon"],
-            key="gps_lon_input",
-        )
-    with c_gps3:
-        manhole_location_desc = st.text_area(
-            "Location description (nearby road, property & landmarks)",
-            value=draft.get("manhole_location_desc", ""),
-        )
-
-    # keep session state in sync with text inputs
-    st.session_state["gps_lat"] = gps_lat
-    st.session_state["gps_lon"] = gps_lon
-
-    site_address = st.text_input(
-        "Site address",
-        value=st.session_state["site_address"],
-        key="site_address_input",
-        help="This will be included in the PDF report for reference.",
-    )
-    st.session_state["site_address"] = site_address
-
-    c_acc1, c_acc2, c_acc3 = st.columns([1, 1, 2])
-    with c_acc1:
-        access_options = ["", "On-road", "Off-road", "Easement", "Private property"]
-        access_val = draft.get("access_type", "")
-        access_index = access_options.index(access_val) if access_val in access_options else 0
-        access_type = st.selectbox(
-            "Access type",
-            access_options,
-            index=access_index,
-        )
-    with c_acc2:
-        confined_space_required = st.checkbox(
-            "Confined space entry required",
-            value=draft.get("confined_space_required", False),
-        )
-        traffic_control_required = st.checkbox(
-            "Traffic control required",
-            value=draft.get("traffic_control_required", False),
-        )
-    with c_acc3:
-        access_safety_constraints = st.text_area(
-            "Safety constraints / access notes",
-            value=draft.get("access_safety_constraints", ""),
-        )
-
-    other_permits_required = st.text_input(
-        "Other permits / approvals (if any)",
-        value=draft.get("other_permits_required", ""),
-    )
-
-    st.markdown("---")
-
-    st.subheader("Pipe & Hydraulics")
-
-    ph1, ph2, ph3, ph4 = st.columns([1, 1, 1, 1])
-    with ph1:
-        pipe_diameter_mm = st.number_input(
-            "Pipe diameter (mm)", min_value=0, value=int(draft.get("pipe_diameter_mm", 0))
-        )
-        depth_to_invert_mm = st.number_input(
-            "Depth to invert (mm)",
-            min_value=0,
-            value=int(draft.get("depth_to_invert_mm", 0)),
-        )
-    with ph2:
-        pipe_material_opts = ["", "VC", "RC", "PVC", "DICL", "Steel", "HDPE", "Other"]
-        pm_val = draft.get("pipe_material", "")
-        pm_index = (
-            pipe_material_opts.index(pm_val)
-            if pm_val in pipe_material_opts
-            else (len(pipe_material_opts) - 1 if pm_val else 0)
-        )
-        pipe_material_choice = st.selectbox(
-            "Pipe material",
-            pipe_material_opts,
-            index=pm_index,
-        )
-        if pipe_material_choice == "Other":
-            pipe_material = st.text_input(
-                "Other pipe material",
-                value=pm_val if pm_val not in pipe_material_opts else "",
+            install_time = st.time_input(
+                "Install time",
+                value=install_time_default,
             )
-        else:
-            pipe_material = pipe_material_choice
 
-        depth_to_soffit_mm = st.number_input(
-            "Depth to soffit (mm)",
-            min_value=0,
-            value=int(draft.get("depth_to_soffit_mm", 0)),
-        )
-    with ph3:
-        pipe_shape_opts = ["", "Circular", "Egg", "Box", "Oval", "Arch", "Other"]
-        ps_val = draft.get("pipe_shape", "")
-        ps_index = (
-            pipe_shape_opts.index(ps_val)
-            if ps_val in pipe_shape_opts
-            else (len(pipe_shape_opts) - 1 if ps_val else 0)
-        )
-        pipe_shape_choice = st.selectbox(
-            "Pipe shape",
-            pipe_shape_opts,
-            index=ps_index,
-        )
-        if pipe_shape_choice == "Other":
-            pipe_shape = st.text_input(
-                "Other pipe shape",
-                value=ps_val if ps_val not in pipe_shape_opts else "",
-            )
-        else:
-            pipe_shape = pipe_shape_choice
-    with ph4:
-        hydro_turbulence_options = ["", "Low", "Moderate", "High"]
-        ht_val = draft.get("hydro_turbulence_level", "")
-        ht_index = (
-            hydro_turbulence_options.index(ht_val)
-            if ht_val in hydro_turbulence_options
-            else 0
-        )
-        hydro_turbulence_level = st.selectbox(
-            "Turbulence level at sensor",
-            hydro_turbulence_options,
-            index=ht_index,
-        )
-
-    uh1, uh2 = st.columns(2)
-    with uh1:
-        upstream_config = st.text_area(
-            "Upstream configuration (drops, bends, junctions, distance)",
-            value=draft.get("upstream_config", ""),
-        )
-    with uh2:
-        downstream_config = st.text_area(
-            "Downstream configuration (drops, bends, junctions, distance)",
-            value=draft.get("downstream_config", ""),
-        )
-
-    hh1, hh2, hh3 = st.columns(3)
-    with hh1:
-        hydro_drops = st.checkbox(
-            "Drops close to meter (≤2D)",
-            value=draft.get("hydro_drops", False),
-        )
-        hydro_bends = st.checkbox(
-            "Bends close to meter (≤5D)",
-            value=draft.get("hydro_bends", False),
-        )
-    with hh2:
-        hydro_junctions = st.checkbox(
-            "Junctions within 5D",
-            value=draft.get("hydro_junctions", False),
-        )
-        hydro_surcharge_risk = st.checkbox(
-            "History of surcharge at site",
-            value=draft.get("hydro_surcharge_risk", False),
-        )
-    with hh3:
-        hydro_backwater_risk = st.checkbox(
-            "Backwater effects likely",
-            value=draft.get("hydro_backwater_risk", False),
-        )
-        hydraulic_notes = st.text_area(
-            "Hydraulic comments (e.g. risk to data quality)",
-            value=draft.get("hydraulic_notes", ""),
-        )
-
-    st.markdown("---")
-
-    st.subheader("Meter, Sensor & Configuration")
-
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        meter_model_opts = [
-            "",
-            "Detectronic MSFM AV",
-            "Detectronic MSFM4",
-            "LIDoTT AV",
-            "Other",
-        ]
-        mm_val = draft.get("meter_model", "")
-        mm_index = (
-            meter_model_opts.index(mm_val)
-            if mm_val in meter_model_opts
-            else (len(meter_model_opts) - 1 if mm_val else 1)
-        )
-        meter_model_choice = st.selectbox(
-            "Meter model",
-            meter_model_opts,
-            index=mm_index,
-        )
-        if meter_model_choice == "Other":
-            meter_model = st.text_input(
-                "Other meter model",
-                value=mm_val if mm_val not in meter_model_opts else "",
-            )
-        else:
-            meter_model = meter_model_choice
-
-        logger_serial = st.text_input(
-            "Logger serial number", value=draft.get("logger_serial", "")
-        )
-    with m2:
-        sensor_serial = st.text_input(
-            "Sensor serial number", value=draft.get("sensor_serial", "")
-        )
-        sensor_distance_from_manhole_m = st.number_input(
-            "Sensor distance from manhole (m)",
-            min_value=0.0,
-            value=float(draft.get("sensor_distance_from_manhole_m", 0.0)),
-        )
-    with m3:
-        sensor_orientation = st.text_input(
-            "Sensor orientation (e.g. upstream, downstream)",
-            value=draft.get("sensor_orientation", ""),
-        )
-        sensor_mount_type = st.text_input(
-            "Sensor mount type (e.g. band, bolt-on)",
-            value=draft.get("sensor_mount_type", ""),
-        )
-
-    datum_reference_desc = st.text_input(
-        "Datum reference (e.g. top of lid, local benchmark)",
-        value=draft.get("datum_reference_desc", ""),
-    )
-
-    r1, r2, r3, r4 = st.columns(4)
-    with r1:
-        level_range_min_mm = st.number_input(
-            "Level range min (mm)",
-            min_value=0,
-            value=int(draft.get("level_range_min_mm", 0)),
-        )
-    with r2:
-        level_range_max_mm = st.number_input(
-            "Level range max (mm)",
-            min_value=0,
-            value=int(draft.get("level_range_max_mm", 0)),
-        )
-    with r3:
-        velocity_range_min_ms = st.number_input(
-            "Velocity range min (m/s)",
-            min_value=0.0,
-            value=float(draft.get("velocity_range_min_ms", 0.0)),
-        )
-    with r4:
-        velocity_range_max_ms = st.number_input(
-            "Velocity range max (m/s)",
-            min_value=0.0,
-            value=float(draft.get("velocity_range_max_ms", 3.0)),
-        )
-
-    output_scaling_desc = st.text_input(
-        "Output scaling (e.g. 4–20 mA = 0–50 L/s)",
-        value=draft.get("output_scaling_desc", ""),
-    )
-
-    cfg1, cfg2, cfg3 = st.columns(3)
-    with cfg1:
-        logging_interval_min = st.number_input(
-            "Logging interval (minutes)",
-            min_value=1,
-            value=int(draft.get("logging_interval_min", 5)),
-        )
-    with cfg2:
-        tz_options = ["", "AEST", "AEDT", "ACST", "AWST", "UTC"]
-        tz_val = draft.get("timezone", "AEST")
-        tz_index = tz_options.index(tz_val) if tz_val in tz_options else 1
-        timezone = st.selectbox("Time zone", tz_options, index=tz_index)
-    with cfg3:
-        comms_method_opts = [
-            "",
-            "SIM – Telstra",
-            "SIM – Optus",
-            "SIM – Vodafone",
-            "Ethernet",
-            "LoRaWAN",
-            "Modbus",
-            "Other",
-        ]
-        cm_val = draft.get("comms_method", "")
-        cm_index = (
-            comms_method_opts.index(cm_val)
-            if cm_val in comms_method_opts
-            else (len(comms_method_opts) - 1 if cm_val else 0)
-        )
-        comms_method_choice = st.selectbox(
-            "Comms method",
-            comms_method_opts,
-            index=cm_index,
-        )
-        if comms_method_choice == "Other":
-            comms_method = st.text_input(
-                "Other comms method",
-                value=cm_val if cm_val not in comms_method_opts else "",
-            )
-        else:
-            comms_method = comms_method_choice
-
-    t1, t2 = st.columns(2)
-    with t1:
-        telemetry_logger_id = st.text_input(
-            "Telemetry logger ID / RTU tag",
-            value=draft.get("telemetry_logger_id", ""),
-        )
-    with t2:
-        telemetry_server = st.text_input(
-            "Telemetry server / platform",
-            value=draft.get("telemetry_server", ""),
-        )
-
-    telemetry_notes = st.text_area(
-        "Telemetry notes (APN, polling, integration, etc.)",
-        value=draft.get("telemetry_notes", ""),
-    )
-
-    st.markdown("---")
-
-    st.subheader("Commissioning Checks – Primary Reading")
-
-    cc1, cc2, cc3 = st.columns(3)
-    with cc1:
-        depth_check_meas_mm = st.number_input(
-            "Measured depth (mm)",
-            min_value=0,
-            value=int(draft.get("depth_check_meas_mm", 0)),
-        )
-        vel_check_meas_ms = st.number_input(
-            "Measured velocity (m/s)",
-            min_value=0.0,
-            value=float(draft.get("vel_check_meas_ms", 0.0)),
-        )
-    with cc2:
-        depth_check_meter_mm = st.number_input(
-            "Meter depth (mm)",
-            min_value=0,
-            value=int(draft.get("depth_check_meter_mm", 0)),
-        )
-        vel_check_meter_ms = st.number_input(
-            "Meter velocity (m/s)",
-            min_value=0.0,
-            value=float(draft.get("vel_check_meter_ms", 0.0)),
-        )
-    with cc3:
-        depth_check_tolerance_mm = st.number_input(
-            "Depth tolerance (±mm)",
-            min_value=0,
-            value=int(draft.get("depth_check_tolerance_mm", 5)),
-        )
-        depth_check_diff_mm = depth_check_meter_mm - depth_check_meas_mm
-        depth_check_within_tol = (
-            abs(depth_check_diff_mm) <= depth_check_tolerance_mm
-        )
-        st.markdown(
-            f"**Depth diff:** {depth_check_diff_mm} mm – "
-            f"{'within tolerance' if depth_check_within_tol else 'outside tolerance'}"
-        )
-
-    c_com1, c_com2 = st.columns(2)
-    with c_com1:
-        cv_options = ["", "Yes", "No"]
-        cv_val = draft.get("comms_verified", "")
-        cv_index = cv_options.index(cv_val) if cv_val in cv_options else 0
-        comms_verified = st.selectbox(
-            "Comms verified on platform?",
-            cv_options,
-            index=cv_index,
-        )
-    with c_com2:
-        comms_verified_at = st.text_input(
-            "Comms verified at (timestamp)",
-            value=draft.get("comms_verified_at", ""),
-        )
-
-    zero_depth_check_done = st.checkbox(
-        "Zero-depth check performed",
-        value=draft.get("zero_depth_check_done", False),
-    )
-    zero_depth_check_notes = st.text_input(
-        "Zero-depth check notes",
-        value=draft.get("zero_depth_check_notes", ""),
-    )
-
-    rc1, rc2, rc3 = st.columns(3)
-    with rc1:
-        reference_device_type = st.text_input(
-            "Reference device type (if used)",
-            value=draft.get("reference_device_type", ""),
-        )
-    with rc2:
-        reference_device_id = st.text_input(
-            "Reference device ID / tag",
-            value=draft.get("reference_device_id", ""),
-        )
-    with rc3:
-        reference_reading_desc = st.text_input(
-            "Reference comparison (brief)",
-            value=draft.get("reference_reading_desc", ""),
-        )
-
-    st.markdown("---")
-
-    st.subheader("Additional Verification Readings (optional)")
-    extra_readings = draft.get("verification_readings", []) or []
-    extra_count = st.number_input(
-        "Number of additional readings",
-        min_value=0,
-        max_value=10,
-        value=len(extra_readings),
-    )
-
-    updated_extra = []
-    for i in range(extra_count):
-        prev = extra_readings[i] if i < len(extra_readings) else {}
-        st.markdown(f"**Reading {i+1}**")
-        ec1, ec2, ec3, ec4 = st.columns(4)
-        with ec1:
-            d_meas = st.number_input(
-                f"Measured depth (mm) – R{i+1}",
-                min_value=0,
-                value=int(prev.get("depth_meas_mm", 0)),
-                key=f"extra_d_meas_{i}",
-            )
-        with ec2:
-            d_meter = st.number_input(
-                f"Meter depth (mm) – R{i+1}",
-                min_value=0,
-                value=int(prev.get("depth_meter_mm", 0)),
-                key=f"extra_d_meter_{i}",
-            )
-        with ec3:
-            v_meas = st.number_input(
-                f"Measured velocity (m/s) – R{i+1}",
-                min_value=0.0,
-                value=float(prev.get("vel_meas_ms", 0.0)),
-                key=f"extra_v_meas_{i}",
-            )
-        with ec4:
-            v_meter = st.number_input(
-                f"Meter velocity (m/s) – R{i+1}",
-                min_value=0.0,
-                value=float(prev.get("vel_meter_ms", 0.0)),
-                key=f"extra_v_meter_{i}",
-            )
-        comment = st.text_input(
-            f"Notes – R{i+1}",
-            value=prev.get("comment", ""),
-            key=f"extra_comment_{i}",
-        )
-        updated_extra.append(
-            {
-                "depth_meas_mm": d_meas,
-                "depth_meter_mm": d_meter,
-                "vel_meas_ms": v_meas,
-                "vel_meter_ms": v_meter,
-                "comment": comment,
-            }
-        )
-
-    st.markdown("---")
-
-    st.subheader("Calibration Suitability & Modelling Notes")
-
-    cal1, cal2 = st.columns([1, 2])
-    with cal1:
-        rating_options = ["", "Good", "Fair", "Poor"]
-        cr_val = draft.get("calibration_rating", "")
-        cr_index = rating_options.index(cr_val) if cr_val in rating_options else 0
-        calibration_rating = st.selectbox(
-            "Overall rating",
-            rating_options,
-            index=cr_index,
-        )
-    with cal2:
-        calibration_comment = st.text_input(
-            "Calibration suitability comment",
-            value=draft.get(
-                "calibration_comment",
-                "Suitable for 3+ months monitoring for model calibration.",
-            ),
-        )
-
-    modelling_notes = st.text_area(
-        "Modelling notes (how this site should / should not be used)",
-        value=draft.get("modelling_notes", ""),
-    )
-    data_quality_risks = st.text_area(
-        "Known data quality risks or limitations",
-        value=draft.get("data_quality_risks", ""),
-    )
-
-    st.markdown("**Installer checklist**")
-    ch1, ch2, ch3, ch4, ch5 = st.columns(5)
-    with ch1:
-        chk_sensor_in_main_flow = st.checkbox(
-            "Sensor in main flow path",
-            value=draft.get("chk_sensor_in_main_flow", True),
-        )
-    with ch2:
-        chk_no_immediate_drops = st.checkbox(
-            "No immediate drops",
-            value=draft.get("chk_no_immediate_drops", True),
-        )
-    with ch3:
-        chk_depth_range_ok = st.checkbox(
-            "Depth/velocity ranges OK",
-            value=draft.get("chk_depth_range_ok", True),
-        )
-    with ch4:
-        chk_logging_started = st.checkbox(
-            "Logging started",
-            value=draft.get("chk_logging_started", True),
-        )
-    with ch5:
-        chk_comms_checked_platform = st.checkbox(
-            "Comms/data checked",
-            value=draft.get("chk_comms_checked_platform", True),
-        )
-
-    st.markdown("---")
-
-    st.subheader("Diagram & Photos")
-
-    diag_col1, diag_col2 = st.columns([2, 2])
-    with diag_col1:
-        diagram_file = st.file_uploader(
-            "Upload manhole / site diagram (PNG/JPG)",
-            type=["png", "jpg", "jpeg"],
-        )
-    existing_diagram = draft.get("diagram")
-    default_diag_name = (
-        existing_diagram.get("name", "Manhole / site diagram")
-        if existing_diagram
-        else "Manhole / site diagram"
-    )
-    with diag_col2:
-        diagram_name = st.text_input(
-            "Diagram name / caption",
-            value=default_diag_name,
-        )
-
-    photo_files = st.file_uploader(
-        "Upload site photos (manhole, sensor, upstream, downstream, access, etc.)",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-        key="photo_files",
-    )
-
-    st.caption(
-        "You can name each photo below. All uploaded photos will be included in the PDF."
-    )
-
-    new_photos = []
-    for i, f in enumerate(photo_files or []):
-        cap = st.text_input(
-            f"Photo {i+1} name / description",
-            value=f.name,
-            key=f"photo_caption_{f.name}_{i}",
-        )
-        new_photos.append(
-            {
-                "name": cap,
-                "data": f.getvalue(),
-                "mime": f.type,
-            }
-        )
-
-    existing_photos_raw = draft.get("photos", []) or []
-    retained_photos = []
-    if existing_photos_raw:
-        st.markdown("**Existing photos**")
         st.caption(
-            "Update captions below or untick a photo to remove it before saving."
+            "Capture the project anchor details before you head down the pit."
         )
-        for i, photo in enumerate(existing_photos_raw):
-            default_name = photo.get("name") or f"Photo {i+1}"
-            name_col, keep_col = st.columns([4, 1])
-            with name_col:
-                edited_name = st.text_input(
-                    f"Caption for existing photo {i+1}",
-                    value=default_name,
-                    key=f"existing_photo_caption_{i}",
-                )
-            with keep_col:
-                keep_photo = st.checkbox(
-                    "Keep photo",
-                    value=True,
-                    key=f"existing_photo_keep_{i}",
-                )
 
-            with st.expander("Preview", expanded=False):
-                if photo.get("data"):
-                    try:
-                        st.image(
-                            photo["data"],
-                            caption=(edited_name or default_name),
-                            use_column_width=True,
-                        )
-                    except Exception:
-                        st.caption("Preview unavailable for this file.")
-                else:
-                    st.caption("No image data available.")
-
-            cleaned_name = (edited_name or "").strip() or "Site photo"
-            if keep_photo:
-                updated_photo = photo.copy()
-                updated_photo["name"] = cleaned_name
-                retained_photos.append(updated_photo)
-
-        removed_count = len(existing_photos_raw) - len(retained_photos)
-        if removed_count > 0:
-            st.info(
-                f"{removed_count} existing photo(s) will be removed when you submit the form."
+    with tab_site:
+        st.markdown("#### Location, access & safety")
+        c_gps1, c_gps2, c_gps3 = st.columns([1, 1, 2])
+        with c_gps1:
+            gps_lat = st.text_input(
+                "GPS latitude",
+                value=st.session_state["gps_lat"],
+                key="gps_lat_input",
+                help="Populate from the map tap or device GPS above.",
+            )
+        with c_gps2:
+            gps_lon = st.text_input(
+                "GPS longitude",
+                value=st.session_state["gps_lon"],
+                key="gps_lon_input",
+            )
+        with c_gps3:
+            manhole_location_desc = st.text_area(
+                "Location description (nearby road, property & landmarks)",
+                value=draft.get("manhole_location_desc", ""),
             )
 
-    existing_photos = retained_photos
-    if st.session_state.get("draft_site") is not None:
-        st.session_state["draft_site"]["photos"] = existing_photos
-    draft["photos"] = existing_photos
+        st.session_state["gps_lat"] = gps_lat
+        st.session_state["gps_lon"] = gps_lon
 
-    if existing_photos and new_photos:
-        st.info(
-            f"{len(existing_photos)} existing photo(s) plus "
-            f"{len(new_photos)} new photo(s) will be stored."
+        site_address = st.text_input(
+            "Site address",
+            value=st.session_state["site_address"],
+            key="site_address_input",
+            help="Shown on the PDF for the engineering team back at the office.",
         )
-    elif existing_photos and not new_photos:
-        st.info(
-            f"{len(existing_photos)} existing photo(s) are ready for export. "
-            "Upload new photos or untick above if you need changes."
+        st.session_state["site_address"] = site_address
+
+        c_acc1, c_acc2, c_acc3 = st.columns([1, 1, 2])
+        with c_acc1:
+            access_options = [
+                "",
+                "On-road",
+                "Off-road",
+                "Easement",
+                "Private property",
+            ]
+            access_val = draft.get("access_type", "")
+            access_index = (
+                access_options.index(access_val) if access_val in access_options else 0
+            )
+            access_type = st.selectbox(
+                "Access type",
+                access_options,
+                index=access_index,
+            )
+        with c_acc2:
+            confined_space_required = st.checkbox(
+                "Confined space entry required",
+                value=draft.get("confined_space_required", False),
+            )
+            traffic_control_required = st.checkbox(
+                "Traffic control required",
+                value=draft.get("traffic_control_required", False),
+            )
+        with c_acc3:
+            access_safety_constraints = st.text_area(
+                "Safety constraints / access notes",
+                value=draft.get("access_safety_constraints", ""),
+            )
+
+        other_permits_required = st.text_input(
+            "Other permits / approvals (if any)",
+            value=draft.get("other_permits_required", ""),
         )
 
-    st.markdown("---")
-
-    st.subheader("Reporting details (Prepared / Reviewed)")
-
-    rep1, rep2, rep3 = st.columns(3)
-    with rep1:
-        prepared_by = st.text_input(
-            "Prepared by",
-            value=draft.get("prepared_by", ""),
-        )
-        prepared_position = st.text_input(
-            "Prepared – position",
-            value=draft.get("prepared_position", ""),
+        st.caption(
+            "Use this tab to capture every safety permission before the crew cracks the lid."
         )
 
-        prepared_date_default = draft.get("prepared_date")
-        if isinstance(prepared_date_default, str):
-            try:
-                prepared_date_default = date.fromisoformat(prepared_date_default)
-            except ValueError:
+    with tab_equipment:
+        st.markdown("#### Pipe & hydraulics envelope")
+        ph1, ph2, ph3, ph4 = st.columns([1, 1, 1, 1])
+        with ph1:
+            pipe_diameter_mm = st.number_input(
+                "Pipe diameter (mm)",
+                min_value=0,
+                value=int(draft.get("pipe_diameter_mm", 0)),
+            )
+            depth_to_invert_mm = st.number_input(
+                "Depth to invert (mm)",
+                min_value=0,
+                value=int(draft.get("depth_to_invert_mm", 0)),
+            )
+        with ph2:
+            pipe_material_opts = [
+                "",
+                "VC",
+                "RC",
+                "PVC",
+                "DICL",
+                "Steel",
+                "HDPE",
+                "Other",
+            ]
+            pm_val = draft.get("pipe_material", "")
+            pm_index = (
+                pipe_material_opts.index(pm_val)
+                if pm_val in pipe_material_opts
+                else (len(pipe_material_opts) - 1 if pm_val else 0)
+            )
+            pipe_material_choice = st.selectbox(
+                "Pipe material",
+                pipe_material_opts,
+                index=pm_index,
+            )
+            if pipe_material_choice == "Other":
+                pipe_material = st.text_input(
+                    "Other pipe material",
+                    value=pm_val if pm_val not in pipe_material_opts else "",
+                )
+            else:
+                pipe_material = pipe_material_choice
+
+            depth_to_soffit_mm = st.number_input(
+                "Depth to soffit (mm)",
+                min_value=0,
+                value=int(draft.get("depth_to_soffit_mm", 0)),
+            )
+        with ph3:
+            pipe_shape_opts = ["", "Circular", "Egg", "Box", "Oval", "Arch", "Other"]
+            ps_val = draft.get("pipe_shape", "")
+            ps_index = (
+                pipe_shape_opts.index(ps_val)
+                if ps_val in pipe_shape_opts
+                else (len(pipe_shape_opts) - 1 if ps_val else 0)
+            )
+            pipe_shape_choice = st.selectbox(
+                "Pipe shape",
+                pipe_shape_opts,
+                index=ps_index,
+            )
+            if pipe_shape_choice == "Other":
+                pipe_shape = st.text_input(
+                    "Other pipe shape",
+                    value=ps_val if ps_val not in pipe_shape_opts else "",
+                )
+            else:
+                pipe_shape = pipe_shape_choice
+        with ph4:
+            hydro_turbulence_options = ["", "Low", "Moderate", "High"]
+            ht_val = draft.get("hydro_turbulence_level", "")
+            ht_index = (
+                hydro_turbulence_options.index(ht_val)
+                if ht_val in hydro_turbulence_options
+                else 0
+            )
+            hydro_turbulence_level = st.selectbox(
+                "Turbulence level at sensor",
+                hydro_turbulence_options,
+                index=ht_index,
+            )
+
+        uh1, uh2 = st.columns(2)
+        with uh1:
+            upstream_config = st.text_area(
+                "Upstream configuration (drops, bends, junctions, distance)",
+                value=draft.get("upstream_config", ""),
+            )
+        with uh2:
+            downstream_config = st.text_area(
+                "Downstream configuration (drops, bends, junctions, distance)",
+                value=draft.get("downstream_config", ""),
+            )
+
+        hh1, hh2, hh3 = st.columns(3)
+        with hh1:
+            hydro_drops = st.checkbox(
+                "Drops close to meter (≤2D)",
+                value=draft.get("hydro_drops", False),
+            )
+            hydro_bends = st.checkbox(
+                "Bends close to meter (≤5D)",
+                value=draft.get("hydro_bends", False),
+            )
+        with hh2:
+            hydro_junctions = st.checkbox(
+                "Junctions within 5D",
+                value=draft.get("hydro_junctions", False),
+            )
+            hydro_surcharge_risk = st.checkbox(
+                "History of surcharge at site",
+                value=draft.get("hydro_surcharge_risk", False),
+            )
+        with hh3:
+            hydro_backwater_risk = st.checkbox(
+                "Backwater effects likely",
+                value=draft.get("hydro_backwater_risk", False),
+            )
+            hydraulic_notes = st.text_area(
+                "Hydraulic comments (e.g. risk to data quality)",
+                value=draft.get("hydraulic_notes", ""),
+            )
+
+        st.markdown("#### Meter, telemetry & configuration")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            meter_model_opts = [
+                "",
+                "Detectronic MSFM AV",
+                "Detectronic MSFM4",
+                "LIDoTT AV",
+                "Other",
+            ]
+            mm_val = draft.get("meter_model", "")
+            mm_index = (
+                meter_model_opts.index(mm_val)
+                if mm_val in meter_model_opts
+                else (len(meter_model_opts) - 1 if mm_val else 1)
+            )
+            meter_model_choice = st.selectbox(
+                "Meter model",
+                meter_model_opts,
+                index=mm_index,
+            )
+            if meter_model_choice == "Other":
+                meter_model = st.text_input(
+                    "Other meter model",
+                    value=mm_val if mm_val not in meter_model_opts else "",
+                )
+            else:
+                meter_model = meter_model_choice
+
+            logger_serial = st.text_input(
+                "Logger serial number", value=draft.get("logger_serial", "")
+            )
+        with m2:
+            sensor_serial = st.text_input(
+                "Sensor serial number", value=draft.get("sensor_serial", "")
+            )
+            sensor_distance_from_manhole_m = st.number_input(
+                "Sensor distance from manhole (m)",
+                min_value=0.0,
+                value=float(draft.get("sensor_distance_from_manhole_m", 0.0)),
+            )
+        with m3:
+            sensor_orientation = st.text_input(
+                "Sensor orientation (e.g. upstream, downstream)",
+                value=draft.get("sensor_orientation", ""),
+            )
+            sensor_mount_type = st.text_input(
+                "Sensor mount type (e.g. band, bolt-on)",
+                value=draft.get("sensor_mount_type", ""),
+            )
+
+        datum_reference_desc = st.text_input(
+            "Datum reference (e.g. top of lid, local benchmark)",
+            value=draft.get("datum_reference_desc", ""),
+        )
+
+        r1, r2, r3, r4 = st.columns(4)
+        with r1:
+            level_range_min_mm = st.number_input(
+                "Level range min (mm)",
+                min_value=0,
+                value=int(draft.get("level_range_min_mm", 0)),
+            )
+        with r2:
+            level_range_max_mm = st.number_input(
+                "Level range max (mm)",
+                min_value=0,
+                value=int(draft.get("level_range_max_mm", 0)),
+            )
+        with r3:
+            velocity_range_min_ms = st.number_input(
+                "Velocity range min (m/s)",
+                min_value=0.0,
+                value=float(draft.get("velocity_range_min_ms", 0.0)),
+            )
+        with r4:
+            velocity_range_max_ms = st.number_input(
+                "Velocity range max (m/s)",
+                min_value=0.0,
+                value=float(draft.get("velocity_range_max_ms", 3.0)),
+            )
+
+        output_scaling_desc = st.text_input(
+            "Output scaling (e.g. 4–20 mA = 0–50 L/s)",
+            value=draft.get("output_scaling_desc", ""),
+        )
+
+        cfg1, cfg2, cfg3 = st.columns(3)
+        with cfg1:
+            logging_interval_min = st.number_input(
+                "Logging interval (minutes)",
+                min_value=1,
+                value=int(draft.get("logging_interval_min", 5)),
+            )
+        with cfg2:
+            tz_options = ["", "AEST", "AEDT", "ACST", "AWST", "UTC"]
+            tz_val = draft.get("timezone", "AEST")
+            tz_index = tz_options.index(tz_val) if tz_val in tz_options else 1
+            timezone = st.selectbox("Time zone", tz_options, index=tz_index)
+        with cfg3:
+            comms_method_opts = [
+                "",
+                "SIM – Telstra",
+                "SIM – Optus",
+                "SIM – Vodafone",
+                "Ethernet",
+                "LoRaWAN",
+                "Modbus",
+                "Other",
+            ]
+            cm_val = draft.get("comms_method", "")
+            cm_index = (
+                comms_method_opts.index(cm_val)
+                if cm_val in comms_method_opts
+                else (len(comms_method_opts) - 1 if cm_val else 0)
+            )
+            comms_method_choice = st.selectbox(
+                "Comms method",
+                comms_method_opts,
+                index=cm_index,
+            )
+            if comms_method_choice == "Other":
+                comms_method = st.text_input(
+                    "Other comms method",
+                    value=cm_val if cm_val not in comms_method_opts else "",
+                )
+            else:
+                comms_method = comms_method_choice
+
+        t1, t2 = st.columns(2)
+        with t1:
+            telemetry_logger_id = st.text_input(
+                "Telemetry logger ID / RTU tag",
+                value=draft.get("telemetry_logger_id", ""),
+            )
+        with t2:
+            telemetry_server = st.text_input(
+                "Telemetry server / platform",
+                value=draft.get("telemetry_server", ""),
+            )
+
+        telemetry_notes = st.text_area(
+            "Telemetry notes (APN, polling, integration, etc.)",
+            value=draft.get("telemetry_notes", ""),
+        )
+
+    with tab_commissioning:
+        st.markdown("#### Commissioning checks – primary")
+        cc1, cc2, cc3 = st.columns(3)
+        with cc1:
+            depth_check_meas_mm = st.number_input(
+                "Measured depth (mm)",
+                min_value=0,
+                value=int(draft.get("depth_check_meas_mm", 0)),
+            )
+            vel_check_meas_ms = st.number_input(
+                "Measured velocity (m/s)",
+                min_value=0.0,
+                value=float(draft.get("vel_check_meas_ms", 0.0)),
+            )
+        with cc2:
+            depth_check_meter_mm = st.number_input(
+                "Meter depth (mm)",
+                min_value=0,
+                value=int(draft.get("depth_check_meter_mm", 0)),
+            )
+            vel_check_meter_ms = st.number_input(
+                "Meter velocity (m/s)",
+                min_value=0.0,
+                value=float(draft.get("vel_check_meter_ms", 0.0)),
+            )
+        with cc3:
+            depth_check_tolerance_mm = st.number_input(
+                "Depth tolerance (±mm)",
+                min_value=0,
+                value=int(draft.get("depth_check_tolerance_mm", 5)),
+            )
+            depth_check_diff_mm = depth_check_meter_mm - depth_check_meas_mm
+            depth_check_within_tol = (
+                abs(depth_check_diff_mm) <= depth_check_tolerance_mm
+            )
+            st.markdown(
+                f"**Depth diff:** {depth_check_diff_mm} mm – "
+                f"{'within tolerance' if depth_check_within_tol else 'outside tolerance'}"
+            )
+
+        c_com1, c_com2 = st.columns(2)
+        with c_com1:
+            cv_options = ["", "Yes", "No"]
+            cv_val = draft.get("comms_verified", "")
+            cv_index = cv_options.index(cv_val) if cv_val in cv_options else 0
+            comms_verified = st.selectbox(
+                "Comms verified on platform?",
+                cv_options,
+                index=cv_index,
+            )
+        with c_com2:
+            comms_verified_at = st.text_input(
+                "Comms verified at (timestamp)",
+                value=draft.get("comms_verified_at", ""),
+            )
+
+        zero_depth_check_done = st.checkbox(
+            "Zero-depth check performed",
+            value=draft.get("zero_depth_check_done", False),
+        )
+        zero_depth_check_notes = st.text_input(
+            "Zero-depth check notes",
+            value=draft.get("zero_depth_check_notes", ""),
+        )
+
+        rc1, rc2, rc3 = st.columns(3)
+        with rc1:
+            reference_device_type = st.text_input(
+                "Reference device type (if used)",
+                value=draft.get("reference_device_type", ""),
+            )
+        with rc2:
+            reference_device_id = st.text_input(
+                "Reference device ID / tag",
+                value=draft.get("reference_device_id", ""),
+            )
+        with rc3:
+            reference_reading_desc = st.text_input(
+                "Reference comparison (brief)",
+                value=draft.get("reference_reading_desc", ""),
+            )
+
+        st.markdown("#### Additional verification readings")
+        extra_readings = draft.get("verification_readings", []) or []
+        extra_count = st.number_input(
+            "Number of additional readings",
+            min_value=0,
+            max_value=10,
+            value=len(extra_readings),
+        )
+
+        updated_extra = []
+        for i in range(extra_count):
+            prev = extra_readings[i] if i < len(extra_readings) else {}
+            card = st.container()
+            with card:
+                st.markdown(f"**Reading {i+1}**")
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                with ec1:
+                    d_meas = st.number_input(
+                        f"Measured depth (mm) – R{i+1}",
+                        min_value=0,
+                        value=int(prev.get("depth_meas_mm", 0)),
+                        key=f"extra_d_meas_{i}",
+                    )
+                with ec2:
+                    d_meter = st.number_input(
+                        f"Meter depth (mm) – R{i+1}",
+                        min_value=0,
+                        value=int(prev.get("depth_meter_mm", 0)),
+                        key=f"extra_d_meter_{i}",
+                    )
+                with ec3:
+                    v_meas = st.number_input(
+                        f"Measured velocity (m/s) – R{i+1}",
+                        min_value=0.0,
+                        value=float(prev.get("vel_meas_ms", 0.0)),
+                        key=f"extra_v_meas_{i}",
+                    )
+                with ec4:
+                    v_meter = st.number_input(
+                        f"Meter velocity (m/s) – R{i+1}",
+                        min_value=0.0,
+                        value=float(prev.get("vel_meter_ms", 0.0)),
+                        key=f"extra_v_meter_{i}",
+                    )
+                comment = st.text_input(
+                    f"Notes – R{i+1}",
+                    value=prev.get("comment", ""),
+                    key=f"extra_comment_{i}",
+                )
+            updated_extra.append(
+                {
+                    "depth_meas_mm": d_meas,
+                    "depth_meter_mm": d_meter,
+                    "vel_meas_ms": v_meas,
+                    "vel_meter_ms": v_meter,
+                    "comment": comment,
+                }
+            )
+
+        st.markdown("#### Calibration & modelling notes")
+        cal1, cal2 = st.columns([1, 2])
+        with cal1:
+            rating_options = ["", "Good", "Fair", "Poor"]
+            cr_val = draft.get("calibration_rating", "")
+            cr_index = rating_options.index(cr_val) if cr_val in rating_options else 0
+            calibration_rating = st.selectbox(
+                "Overall rating",
+                rating_options,
+                index=cr_index,
+            )
+        with cal2:
+            calibration_comment = st.text_input(
+                "Calibration suitability comment",
+                value=draft.get(
+                    "calibration_comment",
+                    "Suitable for 3+ months monitoring for model calibration.",
+                ),
+            )
+
+        modelling_notes = st.text_area(
+            "Modelling notes (how this site should / should not be used)",
+            value=draft.get("modelling_notes", ""),
+        )
+        data_quality_risks = st.text_area(
+            "Known data quality risks or limitations",
+            value=draft.get("data_quality_risks", ""),
+        )
+
+        st.markdown("#### Installer checklist")
+        ch1, ch2, ch3, ch4, ch5 = st.columns(5)
+        with ch1:
+            chk_sensor_in_main_flow = st.checkbox(
+                "Sensor in main flow path",
+                value=draft.get("chk_sensor_in_main_flow", True),
+            )
+        with ch2:
+            chk_no_immediate_drops = st.checkbox(
+                "No immediate drops",
+                value=draft.get("chk_no_immediate_drops", True),
+            )
+        with ch3:
+            chk_depth_range_ok = st.checkbox(
+                "Depth/velocity ranges OK",
+                value=draft.get("chk_depth_range_ok", True),
+            )
+        with ch4:
+            chk_logging_started = st.checkbox(
+                "Logging started",
+                value=draft.get("chk_logging_started", True),
+            )
+        with ch5:
+            chk_comms_checked_platform = st.checkbox(
+                "Comms/data checked",
+                value=draft.get("chk_comms_checked_platform", True),
+            )
+
+    with tab_media:
+        st.markdown("#### Diagrams & photos")
+        diag_col1, diag_col2 = st.columns([2, 2])
+        with diag_col1:
+            diagram_file = st.file_uploader(
+                "Upload manhole / site diagram (PNG/JPG)",
+                type=["png", "jpg", "jpeg"],
+            )
+        existing_diagram = draft.get("diagram")
+        default_diag_name = (
+            existing_diagram.get("name", "Manhole / site diagram")
+            if existing_diagram
+            else "Manhole / site diagram"
+        )
+        with diag_col2:
+            diagram_name = st.text_input(
+                "Diagram name / caption",
+                value=default_diag_name,
+            )
+
+        photo_files = st.file_uploader(
+            "Upload site photos (manhole, sensor, upstream, downstream, access, etc.)",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key="photo_files",
+        )
+
+        st.caption(
+            "Short, descriptive captions make it easier for the modelling team to triage later."
+        )
+
+        new_photos = []
+        for i, f in enumerate(photo_files or []):
+            cap = st.text_input(
+                f"Photo {i+1} name / description",
+                value=f.name,
+                key=f"photo_caption_{f.name}_{i}",
+            )
+            new_photos.append(
+                {
+                    "name": cap,
+                    "data": f.getvalue(),
+                    "mime": f.type,
+                }
+            )
+
+        existing_photos_raw = draft.get("photos", []) or []
+        retained_photos = []
+        if existing_photos_raw:
+            st.markdown("**Existing photos**")
+            st.caption(
+                "Rename or untick anything that shouldn\'t make the final pack."
+            )
+            for i, photo in enumerate(existing_photos_raw):
+                default_name = photo.get("name") or f"Photo {i+1}"
+                name_col, keep_col = st.columns([4, 1])
+                with name_col:
+                    edited_name = st.text_input(
+                        f"Caption for existing photo {i+1}",
+                        value=default_name,
+                        key=f"existing_photo_caption_{i}",
+                    )
+                with keep_col:
+                    keep_photo = st.checkbox(
+                        "Keep photo",
+                        value=True,
+                        key=f"existing_photo_keep_{i}",
+                    )
+
+                with st.expander("Preview", expanded=False):
+                    if photo.get("data"):
+                        try:
+                            st.image(
+                                photo["data"],
+                                caption=(edited_name or default_name),
+                                use_column_width=True,
+                            )
+                        except Exception:
+                            st.caption("Preview unavailable for this file.")
+                    else:
+                        st.caption("No image data available.")
+
+                cleaned_name = (edited_name or "").strip() or "Site photo"
+                if keep_photo:
+                    updated_photo = photo.copy()
+                    updated_photo["name"] = cleaned_name
+                    retained_photos.append(updated_photo)
+
+            removed_count = len(existing_photos_raw) - len(retained_photos)
+            if removed_count > 0:
+                st.info(
+                    f"{removed_count} existing photo(s) will be removed when you submit the form."
+                )
+
+        existing_photos = retained_photos
+        if st.session_state.get("draft_site") is not None:
+            st.session_state["draft_site"]["photos"] = existing_photos
+        draft["photos"] = existing_photos
+
+        if existing_photos and new_photos:
+            st.info(
+                f"{len(existing_photos)} existing photo(s) plus "
+                f"{len(new_photos)} new photo(s) will be stored."
+            )
+        elif existing_photos and not new_photos:
+            st.info(
+                f"{len(existing_photos)} existing photo(s) are ready for export. "
+                "Upload new photos or untick above if you need changes."
+            )
+
+    with tab_signoff:
+        st.markdown("#### Reporting & sign-off")
+        rep1, rep2, rep3 = st.columns(3)
+        with rep1:
+            prepared_by = st.text_input(
+                "Prepared by",
+                value=draft.get("prepared_by", ""),
+            )
+            prepared_position = st.text_input(
+                "Prepared – position",
+                value=draft.get("prepared_position", ""),
+            )
+
+            prepared_date_default = draft.get("prepared_date")
+            if isinstance(prepared_date_default, str):
+                try:
+                    prepared_date_default = date.fromisoformat(prepared_date_default)
+                except ValueError:
+                    prepared_date_default = date.today()
+            elif isinstance(prepared_date_default, date):
+                pass
+            else:
                 prepared_date_default = date.today()
-        elif isinstance(prepared_date_default, date):
-            pass
-        else:
-            prepared_date_default = date.today()
 
-        prepared_date = st.date_input(
-            "Prepared – date",
-            value=prepared_date_default,
-        )
-    with rep2:
-        reviewed_by = st.text_input(
-            "Reviewed by",
-            value=draft.get("reviewed_by", ""),
-        )
-        reviewed_position = st.text_input(
-            "Reviewed – position",
-            value=draft.get("reviewed_position", ""),
-        )
+            prepared_date = st.date_input(
+                "Prepared – date",
+                value=prepared_date_default,
+            )
+        with rep2:
+            reviewed_by = st.text_input(
+                "Reviewed by",
+                value=draft.get("reviewed_by", ""),
+            )
+            reviewed_position = st.text_input(
+                "Reviewed – position",
+                value=draft.get("reviewed_position", ""),
+            )
 
-        reviewed_date_default = draft.get("reviewed_date")
-        if isinstance(reviewed_date_default, str):
-            try:
-                reviewed_date_default = date.fromisoformat(reviewed_date_default)
-            except ValueError:
+            reviewed_date_default = draft.get("reviewed_date")
+            if isinstance(reviewed_date_default, str):
+                try:
+                    reviewed_date_default = date.fromisoformat(reviewed_date_default)
+                except ValueError:
+                    reviewed_date_default = date.today()
+            elif isinstance(reviewed_date_default, date):
+                pass
+            else:
                 reviewed_date_default = date.today()
-        elif isinstance(reviewed_date_default, date):
-            pass
-        else:
-            reviewed_date_default = date.today()
 
-        reviewed_date = st.date_input(
-            "Reviewed – date",
-            value=reviewed_date_default,
-        )
-    with rep3:
-        st.write("")
-        st.write("")
-        st.write("Use these fields for internal QA / sign-off.")
+            reviewed_date = st.date_input(
+                "Reviewed – date",
+                value=reviewed_date_default,
+            )
+        with rep3:
+            st.write("")
+            st.write("")
+            st.write("Use these fields for internal QA / sign-off.")
 
     st.markdown("---")
 
